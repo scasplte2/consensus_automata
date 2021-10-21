@@ -64,3 +64,25 @@ print("ProductSignature verified?", verify_product_signature(prod_vk, prod_sig_t
 print("ProductKey time =", key_time_product(prod_key))
 print("ProductSignature size =", len(prod_sig_t.encode()))
 print("T_max =", T_max)
+
+print("--------------------------------------------")
+print("Test vectors:")
+print("seed:", HexEncoder.encode(test_seed))
+t = 0
+hv = 7
+print("h =", hv)
+sum_key_vector = key_gen_sum(test_seed, hv)
+print("sum_key VK:", HexEncoder.encode(verification_key_sum(sum_key_vector)))
+sigma_0 = sign_sum(sum_key_vector, message)
+print("message:", HexEncoder.encode(message))
+print("sigma t = 0: ", HexEncoder.encode(sigma_0.encode()))
+print("--------------------------------------------")
+sigma_1 = sign_sum(key_update_sum(sum_key_vector, 1), message)
+print("sigma t = 1: ", HexEncoder.encode(sigma_0.encode()))
+print("--------------------------------------------")
+sigma_10 = sign_sum(key_update_sum(sum_key_vector, 10), message)
+print("sigma t = 10: ", HexEncoder.encode(sigma_0.encode()))
+print("--------------------------------------------")
+sigma_100 = sign_sum(key_update_sum(sum_key_vector, 100), message)
+print("sigma t = 100: ", HexEncoder.encode(sigma_0.encode()))
+
