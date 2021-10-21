@@ -8,7 +8,7 @@ import colorama
 import random
 
 colorama.init()
-
+heads_up_display = True
 
 def hash(msg: bytes) -> bytes:
     digest = blake2b(digest_size=32)
@@ -167,11 +167,13 @@ def print_key(n: Node):
     (v, l, r) = n.get()
     if l is None and isinstance(r, Node):
         (sr, wl, wr) = v
-        print("1 ", chex(wl), chex(wr), chex(hash(wl+wr)))
+        if heads_up_display:
+            print("1 ", chex(wl), chex(wr), chex(hash(wl+wr)))
         print_key(r)
     elif r is None and isinstance(l, Node):
         (sr, wl, wr) = v
-        print("0 ", chex(wl), chex(wr), chex(hash(wl+wr)))
+        if heads_up_display:
+            print("0 ", chex(wl), chex(wr), chex(hash(wl+wr)))
         print_key(l)
 
 
@@ -258,11 +260,13 @@ def verify_sum_signature(r: bytes, sigma_t: SumSignature, t: int, m: bytes) -> b
         if t % 2 == 0:
             wl = hash(vk)
             wr = head
-            print("0 ", chex(wl), chex(wr), chex(hash(wl+wr)))
+            if heads_up_display:
+                print("0 ", chex(wl), chex(wr), chex(hash(wl+wr)))
         else:
             wl = head
             wr = hash(vk)
-            print("1 ", chex(wl), chex(wr), chex(hash(wl+wr)))
+            if heads_up_display:
+                print("1 ", chex(wl), chex(wr), chex(hash(wl+wr)))
         w = tail
         while len(w) > 0:
             head, *tail = w
@@ -270,17 +274,21 @@ def verify_sum_signature(r: bytes, sigma_t: SumSignature, t: int, m: bytes) -> b
             if (t//pow(2, hp)) % 2 == 0:
                 wl = hash(wl+wr)
                 wr = head
-                print("0 ", chex(wl), chex(wr), chex(hash(wl+wr)))
+                if heads_up_display:
+                    print("0 ", chex(wl), chex(wr), chex(hash(wl+wr)))
             else:
                 wr = hash(wl+wr)
                 wl = head
-                print("1 ", chex(wl), chex(wr), chex(hash(wl+wr)))
+                if heads_up_display:
+                    print("1 ", chex(wl), chex(wr), chex(hash(wl+wr)))
             w = tail
         bw = bw and r == hash(wl + wr)
-        print("vk match? ", r == hash(wl + wr), chex(r), chex(hash(wl+wr)))
+        if heads_up_display:
+            print("vk match?  ", r == hash(wl + wr), chex(r), chex(hash(wl+wr)))
     else:
         bw = bw and r == hash(vk)
     verify_key = VerifyKey(vk, encoder=RawEncoder)
     bs = test_signature(verify_key, sigma, m)
-    print("Sigma verified?", bs)
+    if heads_up_display:
+        print("Sigma verified?", bs)
     return bw and bs

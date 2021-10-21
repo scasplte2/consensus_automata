@@ -2,11 +2,10 @@ from sum_comp import *
 
 
 class ProductKey:
-    def __init__(self, tau_1, sigma_1, seed, r_2, tau_2):
+    def __init__(self, tau_1, sigma_1, seed, tau_2):
         self.tau_1 = tau_1
         self.sigma_1 = sigma_1
         self.seed = seed
-        self.r_2 = r_2
         self.tau_2 = tau_2
 
     def max_time_steps(self) -> int:
@@ -36,6 +35,17 @@ class ProductSignature:
         return self.sigma_1, self.sigma_2, self.r_2
 
 
+def erase_leaf_sk(n: Node) -> Node:
+    if n.is_leaf():
+        (sk, vk) = n.value
+        return Node((None, vk), None, None)
+    else:
+        if n.left is None and isinstance(n.right, Node):
+            return Node(n.value, None, erase_leaf_sk(n.right))
+        else:
+            return Node(n.value, erase_leaf_sk(n.left), None)
+
+
 def key_gen_product(s: bytes, h1: int, h2: int):
     (s1, s2) = doubling_prng(s)
     (s3, s4) = doubling_prng(s2)
@@ -43,8 +53,8 @@ def key_gen_product(s: bytes, h1: int, h2: int):
     tau_2 = key_gen_sum(s3, h2)
     r_2 = verification_key_sum(tau_2)
     sigma_1 = sign_sum(tau_1, r_2)
-    tau_1 = key_update_sum(tau_1, 1)
-    return ProductKey(tau_1, sigma_1, s4, r_2, tau_2)
+    tau_1 = key_update_sum(tau_1, 0)
+    return ProductKey(tau_1, sigma_1, s4, tau_2)
 
 
 def verification_key_product(key: ProductKey) -> bytes:
@@ -52,15 +62,16 @@ def verification_key_product(key: ProductKey) -> bytes:
 
 
 def key_time_product(key: ProductKey) -> int:
-    h2 = height(key.tau_1)
-    t1 = key_time_sum(key.tau_1)-1
+    h2 = height(key.tau_2)
+    t1 = key_time_sum(key.tau_1)
     t2 = key_time_sum(key.tau_2)
     return t1*pow(2, h2) + t2
 
 
 def sign_product(key: ProductKey, m: bytes):
     sigma_2 = sign_sum(key.tau_2, m)
-    return ProductSignature(key.sigma_1, sigma_2, key.r_2)
+    r_2 = verification_key_sum(key.tau_2)
+    return ProductSignature(key.sigma_1, sigma_2, r_2)
 
 
 def verify_product_signature(vk: bytes, sigma: ProductSignature, t: int, m: bytes) -> bool:
@@ -91,11 +102,11 @@ def key_update_product(key: ProductKey, t: int) -> ProductKey:
             r_2 = verification_key_sum(tau_2)
             sigma_1 = sign_sum(tau_1, r_2)
             tau_2 = evolve_key(tau_2, t2)
-            tau_1 = evolve_key(tau_1, t1+1)
-            return ProductKey(tau_1, sigma_1, s2, r_2, tau_2)
+            tau_1 = erase_leaf_sk(tau_1)
+            return ProductKey(tau_1, sigma_1, s2, tau_2)
         else:
             tau_2 = evolve_key(key.tau_2, t2)
-            return ProductKey(key.tau_1, key.sigma_1, key.seed, key.r_2, tau_2)
+            return ProductKey(key.tau_1, key.sigma_1, key.seed, tau_2)
     else:
         return key
 
