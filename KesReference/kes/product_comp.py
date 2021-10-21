@@ -9,6 +9,9 @@ class ProductKey:
         self.r_2 = r_2
         self.tau_2 = tau_2
 
+    def max_time_steps(self) -> int:
+        return pow(2, height(self.tau_1) + height(self.tau_2))
+
 
 class ProductSignature:
     def __init__(self, sigma_1: SumSignature, sigma_2: SumSignature, r_2: bytes):
@@ -40,6 +43,7 @@ def key_gen_product(s: bytes, h1: int, h2: int):
     tau_2 = key_gen_sum(s3, h2)
     r_2 = verification_key_sum(tau_2)
     sigma_1 = sign_sum(tau_1, r_2)
+    tau_1 = key_update_sum(tau_1, 1)
     return ProductKey(tau_1, sigma_1, s4, r_2, tau_2)
 
 
@@ -49,7 +53,7 @@ def verification_key_product(key: ProductKey) -> bytes:
 
 def key_time_product(key: ProductKey) -> int:
     h2 = height(key.tau_1)
-    t1 = key_time_sum(key.tau_1)
+    t1 = key_time_sum(key.tau_1)-1
     t2 = key_time_sum(key.tau_2)
     return t1*pow(2, h2) + t2
 
@@ -87,6 +91,7 @@ def key_update_product(key: ProductKey, t: int) -> ProductKey:
             r_2 = verification_key_sum(tau_2)
             sigma_1 = sign_sum(tau_1, r_2)
             tau_2 = evolve_key(tau_2, t2)
+            tau_1 = evolve_key(tau_1, t1+1)
             return ProductKey(tau_1, sigma_1, s2, r_2, tau_2)
         else:
             tau_2 = evolve_key(key.tau_2, t2)

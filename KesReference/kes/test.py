@@ -54,16 +54,19 @@ print("Product composition test: \nevolve the key and make some signatures...")
 
 h1 = 12
 h2 = 12
-T_max = pow(2, h1 + h2)
 prod_key = key_gen_product(test_seed, h1, h2)
-t = 2*T_max//3
-prod_key = key_update_product(prod_key, t)
-prod_sig_t = sign_product(prod_key, message)
-prod_vk = verification_key_product(prod_key)
-print("ProductSignature verified?", verify_product_signature(prod_vk, prod_sig_t, t, message))
-print("ProductKey time =", key_time_product(prod_key))
-print("ProductSignature size =", len(prod_sig_t.encode()))
-print("T_max =", T_max)
+t_max = prod_key.max_time_steps()
+t = 0
+print("T_max =", t_max)
+while t < t_max:
+    t = random.randint(t, t_max+1)
+    print("t =", t)
+    prod_key = key_update_product(prod_key, t)
+    prod_sig_t = sign_product(prod_key, message)
+    prod_vk = verification_key_product(prod_key)
+    print("ProductSignature verified?", verify_product_signature(prod_vk, prod_sig_t, t, message))
+    print("ProductKey time =", key_time_product(prod_key))
+    print("ProductSignature size =", len(prod_sig_t.encode()))
 
 print("--------------------------------------------")
 print("Test vectors:")
