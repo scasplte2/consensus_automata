@@ -1,5 +1,14 @@
 from product_comp import *
 
+
+def print_split(data: bytes):
+    string = data.hex()
+    n = 64
+    chunks = [string[iii:iii + n] for iii in range(0, len(string), n)]
+    for chunk in chunks:
+        print(chunk)
+
+
 test_message = 'message'.encode('utf-8')
 
 # Generate a new random signing key
@@ -22,8 +31,8 @@ byte_var = 'test'.encode('utf-8')
 message = 'message'.encode('utf-8')
 test_seed = hash(byte_var)
 
-test_sum = True
-test_prod = True
+test_sum = False
+test_prod = False
 test_vectors = True
 
 if test_sum:
@@ -54,16 +63,16 @@ if test_sum:
             ctr = ctr + 1
         else:
             print("verification failed...")
-        print("\n--------------------------------------------\n")
+        print("----------------------------------------------------------------")
     if ctr == 1:
         print("Success!")
     else:
         print("Error: more than one time step verified, serious bug in code!")
         test_sum = False
-    print("\n--------------------------------------------\n")
+    print("----------------------------------------------------------------")
 
 if test_prod:
-    print("\n--------------------------------------------\n")
+    print("----------------------------------------------------------------")
     print("Testing product key update consistency...")
     h1 = 4
     h2 = 4
@@ -84,9 +93,9 @@ if test_prod:
     except ValueError:
         print("Test failed, keys did not match!")
         test_prod = False
-    print("\n--------------------------------------------\n")
+    print("----------------------------------------------------------------")
 
-if test_prod and test_sum:
+if test_prod:
     print("Product composition test: \nevolve the key and make some signatures...")
     h1 = 10
     h2 = 10
@@ -117,96 +126,127 @@ if test_prod and test_sum:
         print('Test Failed!')
         test_prod = False
 
-if test_vectors and test_sum and test_prod:
-    print("\n--------------------------------------------\n")
+if test_vectors:
+    print("----------------------------------------------------------------")
     print("Sum Test vectors 1:")
-    print("seed:", Base64Encoder.encode(test_seed))
+    print("seed:")
+    print_split(test_seed)
     t = 0
     hv = 7
     print("h =", hv)
     sum_key_vector = key_gen_sum(test_seed, hv)
-    print("sum_key VK:", Base64Encoder.encode(verification_key_sum(sum_key_vector)))
-    print("sum_key SK", Base64Encoder.encode(sum_key_vector.encode()))
+    print("sum_key VK:")
+    print_split(verification_key_sum(sum_key_vector))
+    print("sum_key SK")
+    print_split(sum_key_vector.encode())
     sigma_0 = sign_sum(sum_key_vector, message)
-    print("message:", Base64Encoder.encode(message))
-    print("sigma t = 0: ", Base64Encoder.encode(sigma_0.encode()))
-    print("\n--------------------------------------------\n")
+    print("message:")
+    print_split(message)
+    print("sigma t = 0: ")
+    print_split(sigma_0.encode())
+    print("----------------------------------------------------------------")
     sigma_1 = sign_sum(key_update_sum(sum_key_vector, 1), message)
-    print("sigma t = 1: ", Base64Encoder.encode(sigma_0.encode()))
-    print("\n--------------------------------------------\n")
+    print("sigma t = 1: ")
+    print_split(sigma_1.encode())
+    print("----------------------------------------------------------------")
     sigma_10 = sign_sum(key_update_sum(sum_key_vector, 10), message)
-    print("sigma t = 10: ", Base64Encoder.encode(sigma_0.encode()))
-    print("\n--------------------------------------------\n")
+    print("sigma t = 10: ")
+    print_split(sigma_10.encode())
+    print("----------------------------------------------------------------")
     sigma_100 = sign_sum(key_update_sum(sum_key_vector, 100), message)
-    print("sigma t = 100: ", Base64Encoder.encode(sigma_0.encode()))
+    print("sigma t = 100: ")
+    print_split(sigma_100.encode())
 
-if test_vectors and test_sum and test_prod:
-    print("\n--------------------------------------------\n")
+if test_vectors:
+    print("----------------------------------------------------------------")
     print("Sum Test vectors 2:")
     vector_seed_2 = hash(b'01')
-    print("seed:", Base64Encoder.encode(vector_seed_2))
+    print("seed:")
+    print_split(vector_seed_2)
     t = 0
     hv = 2
     print("h =", hv)
     sum_key_vector = key_gen_sum(test_seed, hv)
-    print("sum_key VK:", Base64Encoder.encode(verification_key_sum(sum_key_vector)))
-    print("sum_key SK", Base64Encoder.encode(sum_key_vector.encode()))
+    print("sum_key VK:")
+    print_split(verification_key_sum(sum_key_vector))
+    print("sum_key SK")
+    print_split(sum_key_vector.encode())
     message_vector_2 = hash(b'02')
     sigma_0 = sign_sum(sum_key_vector, message)
-    print("message:", Base64Encoder.encode(message))
-    print("sigma t = 0: ", Base64Encoder.encode(sigma_0.encode()))
-    print("\n--------------------------------------------\n")
+    print("message:")
+    print_split(message)
+    print("----------------------------------------------------------------")
+    print("sigma t = 0: ")
+    print_split(sigma_0.encode())
+    print("----------------------------------------------------------------")
     sigma_1 = sign_sum(key_update_sum(sum_key_vector, 1), message)
-    print("sigma t = 1: ", Base64Encoder.encode(sigma_0.encode()))
-    print("\n--------------------------------------------\n")
-    sigma_10 = sign_sum(key_update_sum(sum_key_vector, 2), message)
-    print("sigma t = 2: ", Base64Encoder.encode(sigma_0.encode()))
-    print("\n--------------------------------------------\n")
-    sigma_100 = sign_sum(key_update_sum(sum_key_vector, 3), message)
-    print("sigma t = 3: ", Base64Encoder.encode(sigma_0.encode()))
+    print("sigma t = 1: ")
+    print_split(sigma_1.encode())
+    print("----------------------------------------------------------------")
+    sigma_2 = sign_sum(key_update_sum(sum_key_vector, 2), message)
+    print("sigma t = 2: ")
+    print_split(sigma_2.encode())
+    print("----------------------------------------------------------------")
+    sigma_3 = sign_sum(key_update_sum(sum_key_vector, 3), message)
+    print("sigma t = 3: ")
+    print_split(sigma_3.encode())
 
 
-if test_vectors and test_sum and test_prod:
-    print("\n--------------------------------------------\n")
+if test_vectors:
+    print("----------------------------------------------------------------")
     print("Product Test vectors 1:")
-    print("seed:", Base64Encoder.encode(test_seed))
+    print("seed:")
+    print_split(test_seed)
     t = 0
     h1 = 5
     h2 = 9
     print("h1 =", h1)
     print("h2 =", h2)
     prod_key_vector = key_gen_product(test_seed, h1, h2)
-    print("prod_key VK:", Base64Encoder.encode(verification_key_product(prod_key_vector)))
-    print("prod_key SK:", Base64Encoder.encode(prod_key_vector.encode()))
+    print("prod_key VK:")
+    print_split(verification_key_product(prod_key_vector))
+    print("prod_key SK:")
+    print_split(prod_key_vector.encode())
     sigma_0 = sign_product(prod_key_vector, message)
-    print("message:", Base64Encoder.encode(message))
-    print("sigma t = 0: ", Base64Encoder.encode(sigma_0.encode()))
-    print("\n--------------------------------------------\n")
-    sigma_1 = sign_product(key_update_product(prod_key_vector, 1), message)
-    print("sigma t = 100: ", Base64Encoder.encode(sigma_0.encode()))
-    print("\n--------------------------------------------\n")
-    sigma_10 = sign_product(key_update_product(prod_key_vector, 10), message)
-    print("sigma t = 1000: ", Base64Encoder.encode(sigma_0.encode()))
-    print("\n--------------------------------------------\n")
+    print("message:")
+    print_split(message)
+    print("----------------------------------------------------------------")
+    print("sigma t = 0: ")
+    print_split(sigma_0.encode())
+    print("----------------------------------------------------------------")
     sigma_100 = sign_product(key_update_product(prod_key_vector, 100), message)
-    print("sigma t = 10000: ", Base64Encoder.encode(sigma_0.encode()))
+    print("sigma t = 100: ")
+    print_split(sigma_100.encode())
+    print("----------------------------------------------------------------")
+    sigma_1000 = sign_product(key_update_product(prod_key_vector, 1000), message)
+    print("sigma t = 1000: ")
+    print_split(sigma_1000.encode())
+    print("----------------------------------------------------------------")
+    sigma_10000 = sign_product(key_update_product(prod_key_vector, 10000), message)
+    print("sigma t = 10000: ")
+    print_split(sigma_10000.encode())
 
-if test_vectors and test_sum and test_prod:
-    print("\n--------------------------------------------\n")
-    print("Product Test vectors 1:")
-    print("seed:", Base64Encoder.encode(test_seed))
+if test_vectors:
+    print("----------------------------------------------------------------")
+    print("Product Test vectors 2:")
+    print("seed:")
+    print_split(test_seed)
     t = 0
     h1 = 2
     h2 = 2
     print("h1 =", h1)
     print("h2 =", h2)
     prod_key_vector = key_gen_product(test_seed, h1, h2)
-    print("prod_key VK:", Base64Encoder.encode(verification_key_product(prod_key_vector)))
-    print("prod_key SK:", Base64Encoder.encode(prod_key_vector.encode()))
-    print("message:", Base64Encoder.encode(message))
-    print("\n--------------------------------------------\n")
+    print("prod_key VK:")
+    print_split(verification_key_product(prod_key_vector))
+    print("prod_key SK:")
+    print_split(prod_key_vector.encode())
+    print("message:")
+    print_split(message)
+    print("----------------------------------------------------------------")
     for i in range(0, prod_key_vector.max_time_steps()):
         prod_key_vector = key_update_product(prod_key_vector, i)
         sigma_i = sign_product(prod_key_vector, message)
-        print("sigma t = "+str(i)+": ", Base64Encoder.encode(sigma_i.encode()))
-        print("\n--------------------------------------------\n")
+        print("sigma t = "+str(i)+": ")
+        print_split((sigma_i.encode()))
+        print("----------------------------------------------------------------")

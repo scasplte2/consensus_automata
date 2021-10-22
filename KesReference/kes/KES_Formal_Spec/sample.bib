@@ -1,0 +1,94 @@
+@InProceedings{MMM,
+author="Malkin, Tal
+and Micciancio, Daniele
+and Miner, Sara",
+editor="Knudsen, Lars R.",
+title="Efficient Generic Forward-Secure Signatures with an Unbounded Number of Time Periods",
+booktitle="Advances in Cryptology --- EUROCRYPT 2002",
+year="2002",
+publisher="Springer Berlin Heidelberg",
+address="Berlin, Heidelberg",
+pages="400--417",
+abstract="We construct the first efficient forward-secure digital signature scheme where the total number of time periods for which the public key is used does not have to be fixed in advance. The number of time periods for which our scheme can be used is bounded only by an exponential function of the security parameter (given this much time, any scheme can be broken by exhaustive search), and its performance depends (minimally) only on the time elapsed so far. Our scheme achieves excellent performance overall, is very competitive with previous schemes with respect to all parameters, and outperforms each of the previous schemes in at least one parameter. Moreover, the scheme can be based on any underlying digital signature scheme, and does not rely on specific assumptions. Its forward security is proven in the standard model, without using a random oracle. As an intermediate step in designing our scheme, we propose and study two general composition operations that can be used to combine any existing signature schemes (whether standard or forward-secure) into new forward-secure signature schemes.",
+isbn="978-3-540-46035-0"
+}
+
+@inproceedings{BM1999,
+author = {Bellare, Mihir and Miner, Sara K.},
+title = {A Forward-Secure Digital Signature Scheme},
+year = {1999},
+isbn = {3540663479},
+publisher = {Springer-Verlag},
+address = {Berlin, Heidelberg},
+abstract = {We describe a digital signature scheme in which the public key is fixed but the secret
+signing key is updated at regular intervals so as to provide a forward security property:
+compromise of the current secret key does not enable an adversary to forge signatures
+pertaining to the past. This can be useful to mitigate the damage caused by key exposure
+without requiring distribution of keys. Our construction uses ideas from the Fiat-Shamir
+and Ong-Schnorr identification and signature schemes, and is proven to be forward
+secure based on the hardness of factoring, in the random oracle model. The construction
+is also quite efficient.},
+booktitle = {Proceedings of the 19th Annual International Cryptology Conference on Advances in Cryptology},
+pages = {431–448},
+numpages = {18},
+series = {CRYPTO '99}
+}
+
+@inproceedings{Anderson1997,
+author = {Anderson, R.},
+title = {Two Remarks on Public Key Cryptology (Invited Lecture)},
+publisher = {ACM Press},
+address = {Zurich, Switzerland},
+booktitle = {Proceedings of the ACM Conference on Computer and Communications},
+pages = {135-147}
+}
+
+@inproceedings{Genesis,
+author = {Badertscher, Christian and Gaži, Peter and Kiayias, Aggelos and Russell, Alexander and Zikas, Vassilis},
+year = {2018},
+month = {10},
+pages = {913-930},
+title = {Ouroboros Genesis: Composable Proof-of-Stake Blockchains with Dynamic Availability},
+doi = {10.1145/3243734.3243848}
+}
+
+@InProceedings{Praos,
+author="David, Bernardo
+and Ga{\v{z}}i, Peter
+and Kiayias, Aggelos
+and Russell, Alexander",
+editor="Nielsen, Jesper Buus
+and Rijmen, Vincent",
+title="Ouroboros Praos: An Adaptively-Secure, Semi-synchronous Proof-of-Stake Blockchain",
+booktitle="Advances in Cryptology -- EUROCRYPT 2018 ",
+year="2018",
+publisher="Springer International Publishing",
+address="Cham",
+pages="66--98",
+abstract="We present ``Ouroboros Praos'', a proof-of-stake blockchain protocol that, for the first time, provides security against fully-adaptive corruption in the semi-synchronous setting: Specifically, the adversary can corrupt any participant of a dynamically evolving population of stakeholders at any moment as long the stakeholder distribution maintains an honest majority of stake; furthermore, the protocol tolerates an adversarially-controlled message delivery delay unknown to protocol participants.",
+isbn="978-3-319-78375-8"
+}
+
+@misc{Canetti,
+  title={Universally Composable Signatures, Certification and Authentication},
+  booktitle={IACR Eprint archive},
+  keywords={foundations /},
+  url={http://eprint.iacr.org/2003/239},
+  note={An extended abstract of this work appears in the proceedings of CSFW 2004. The current version contains some corrections and updates of the CSFW 2004 paper. canetti@watson.ibm.com 12645 received 17 Nov 2003, last revised 15 Aug 2004},
+  author={Ran Canetti},
+  year=2003
+}
+
+
+@inproceedings{ed25519,
+  title={High-Speed High-Security Signatures},
+  booktitle={CHES},
+  series={Lecture Notes in Computer Science},
+  publisher={Springer},
+  volume={6917},
+  pages={124-142},
+  url={https://www.iacr.org/archive/ches2011/69170125/69170125.pdf},
+  doi={10.1007/978-3-642-23951-9_9},
+  author={Daniel J. Bernstein and Niels Duif and Tanja Lange and Peter Schwabe and Bo-Yin Yang},
+  year=2011
+}

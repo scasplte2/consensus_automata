@@ -1,6 +1,5 @@
 from nacl.encoding import RawEncoder
 from nacl.encoding import HexEncoder
-from nacl.encoding import Base64Encoder
 from nacl.signing import SigningKey
 from nacl.signing import VerifyKey
 from nacl.exceptions import BadSignatureError
