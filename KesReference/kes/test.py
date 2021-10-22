@@ -15,7 +15,7 @@ verify_key.verify(sig, encoder=RawEncoder)
 signature_bytes = RawEncoder.decode(sig.signature)
 verify_key.verify(test_message, signature_bytes, encoder=RawEncoder)
 
-print(test_signature(verify_key, signature_bytes, test_message))
+# print(test_signature(verify_key, signature_bytes, test_message))
 
 byte_var = 'test'.encode('utf-8')
 
@@ -28,7 +28,7 @@ test_vectors = True
 
 if test_sum:
     print("generating sum key...")
-    h = 10
+    h = 7
     new_key = key_gen_sum(test_seed, h)
     print("generated key!")
     ctr = 0
@@ -37,6 +37,11 @@ if test_sum:
     for i in range(0, pow(2, h)):
         t = i
         new_key = key_update_sum(new_key, t)
+        print(height(new_key))
+        new_key_bytes = new_key.encode()
+        print("private key byte length:", len(new_key_bytes))
+        new_key = Node.decode(new_key_bytes)
+        print(height(new_key))
         print_key(new_key)
         print("key time:", key_time_sum(new_key))
         signature = sign_sum(new_key, message)
@@ -49,13 +54,37 @@ if test_sum:
             ctr = ctr + 1
         else:
             print("verification failed...")
-        print("--------------------------------------------")
+        print("\n--------------------------------------------\n")
     if ctr == 1:
         print("Success!")
     else:
         print("Error: more than one time step verified, serious bug in code!")
         test_sum = False
-    print("--------------------------------------------")
+    print("\n--------------------------------------------\n")
+
+if test_prod:
+    print("\n--------------------------------------------\n")
+    print("Testing product key update consistency...")
+    h1 = 4
+    h2 = 4
+    prod_key = key_gen_product(test_seed, h1, h2)
+    try:
+        for i in range(0, prod_key.max_time_steps()):
+            prod_key = key_update_product(prod_key, i)
+            prod_key_2 = key_update_product(key_gen_product(test_seed, h1, h2), i)
+            sig1 = sign_product(prod_key, message)
+            sig2 = sign_product(prod_key_2, message)
+            if prod_key.encode() != prod_key_2.encode():
+                print("key bytes didn't match.")
+                raise ValueError
+            if sig1.encode() != sig2.encode():
+                print("signature bytes didn't match.")
+                raise ValueError
+        print("Success!")
+    except ValueError:
+        print("Test failed, keys did not match!")
+        test_prod = False
+    print("\n--------------------------------------------\n")
 
 if test_prod and test_sum:
     print("Product composition test: \nevolve the key and make some signatures...")
@@ -70,6 +99,8 @@ if test_prod and test_sum:
         for t in t_axis:
             print("t =", t)
             prod_key = key_update_product(prod_key, t)
+            prod_key_bytes = prod_key.encode()
+            prod_key = ProductKey.decode(prod_key_bytes)
             if t != key_time_product(prod_key):
                 print("Key update error!")
                 raise ValueError
@@ -87,24 +118,95 @@ if test_prod and test_sum:
         test_prod = False
 
 if test_vectors and test_sum and test_prod:
-    print("--------------------------------------------")
-    print("Test vectors:")
-    print("seed:", HexEncoder.encode(test_seed))
+    print("\n--------------------------------------------\n")
+    print("Sum Test vectors 1:")
+    print("seed:", Base64Encoder.encode(test_seed))
     t = 0
     hv = 7
     print("h =", hv)
     sum_key_vector = key_gen_sum(test_seed, hv)
-    print("sum_key VK:", HexEncoder.encode(verification_key_sum(sum_key_vector)))
+    print("sum_key VK:", Base64Encoder.encode(verification_key_sum(sum_key_vector)))
+    print("sum_key SK", Base64Encoder.encode(sum_key_vector.encode()))
     sigma_0 = sign_sum(sum_key_vector, message)
-    print("message:", HexEncoder.encode(message))
-    print("sigma t = 0: ", HexEncoder.encode(sigma_0.encode()))
-    print("--------------------------------------------")
+    print("message:", Base64Encoder.encode(message))
+    print("sigma t = 0: ", Base64Encoder.encode(sigma_0.encode()))
+    print("\n--------------------------------------------\n")
     sigma_1 = sign_sum(key_update_sum(sum_key_vector, 1), message)
-    print("sigma t = 1: ", HexEncoder.encode(sigma_0.encode()))
-    print("--------------------------------------------")
+    print("sigma t = 1: ", Base64Encoder.encode(sigma_0.encode()))
+    print("\n--------------------------------------------\n")
     sigma_10 = sign_sum(key_update_sum(sum_key_vector, 10), message)
-    print("sigma t = 10: ", HexEncoder.encode(sigma_0.encode()))
-    print("--------------------------------------------")
+    print("sigma t = 10: ", Base64Encoder.encode(sigma_0.encode()))
+    print("\n--------------------------------------------\n")
     sigma_100 = sign_sum(key_update_sum(sum_key_vector, 100), message)
-    print("sigma t = 100: ", HexEncoder.encode(sigma_0.encode()))
+    print("sigma t = 100: ", Base64Encoder.encode(sigma_0.encode()))
 
+if test_vectors and test_sum and test_prod:
+    print("\n--------------------------------------------\n")
+    print("Sum Test vectors 2:")
+    vector_seed_2 = hash(b'01')
+    print("seed:", Base64Encoder.encode(vector_seed_2))
+    t = 0
+    hv = 2
+    print("h =", hv)
+    sum_key_vector = key_gen_sum(test_seed, hv)
+    print("sum_key VK:", Base64Encoder.encode(verification_key_sum(sum_key_vector)))
+    print("sum_key SK", Base64Encoder.encode(sum_key_vector.encode()))
+    message_vector_2 = hash(b'02')
+    sigma_0 = sign_sum(sum_key_vector, message)
+    print("message:", Base64Encoder.encode(message))
+    print("sigma t = 0: ", Base64Encoder.encode(sigma_0.encode()))
+    print("\n--------------------------------------------\n")
+    sigma_1 = sign_sum(key_update_sum(sum_key_vector, 1), message)
+    print("sigma t = 1: ", Base64Encoder.encode(sigma_0.encode()))
+    print("\n--------------------------------------------\n")
+    sigma_10 = sign_sum(key_update_sum(sum_key_vector, 2), message)
+    print("sigma t = 2: ", Base64Encoder.encode(sigma_0.encode()))
+    print("\n--------------------------------------------\n")
+    sigma_100 = sign_sum(key_update_sum(sum_key_vector, 3), message)
+    print("sigma t = 3: ", Base64Encoder.encode(sigma_0.encode()))
+
+
+if test_vectors and test_sum and test_prod:
+    print("\n--------------------------------------------\n")
+    print("Product Test vectors 1:")
+    print("seed:", Base64Encoder.encode(test_seed))
+    t = 0
+    h1 = 5
+    h2 = 9
+    print("h1 =", h1)
+    print("h2 =", h2)
+    prod_key_vector = key_gen_product(test_seed, h1, h2)
+    print("prod_key VK:", Base64Encoder.encode(verification_key_product(prod_key_vector)))
+    print("prod_key SK:", Base64Encoder.encode(prod_key_vector.encode()))
+    sigma_0 = sign_product(prod_key_vector, message)
+    print("message:", Base64Encoder.encode(message))
+    print("sigma t = 0: ", Base64Encoder.encode(sigma_0.encode()))
+    print("\n--------------------------------------------\n")
+    sigma_1 = sign_product(key_update_product(prod_key_vector, 1), message)
+    print("sigma t = 100: ", Base64Encoder.encode(sigma_0.encode()))
+    print("\n--------------------------------------------\n")
+    sigma_10 = sign_product(key_update_product(prod_key_vector, 10), message)
+    print("sigma t = 1000: ", Base64Encoder.encode(sigma_0.encode()))
+    print("\n--------------------------------------------\n")
+    sigma_100 = sign_product(key_update_product(prod_key_vector, 100), message)
+    print("sigma t = 10000: ", Base64Encoder.encode(sigma_0.encode()))
+
+if test_vectors and test_sum and test_prod:
+    print("\n--------------------------------------------\n")
+    print("Product Test vectors 1:")
+    print("seed:", Base64Encoder.encode(test_seed))
+    t = 0
+    h1 = 2
+    h2 = 2
+    print("h1 =", h1)
+    print("h2 =", h2)
+    prod_key_vector = key_gen_product(test_seed, h1, h2)
+    print("prod_key VK:", Base64Encoder.encode(verification_key_product(prod_key_vector)))
+    print("prod_key SK:", Base64Encoder.encode(prod_key_vector.encode()))
+    print("message:", Base64Encoder.encode(message))
+    print("\n--------------------------------------------\n")
+    for i in range(0, prod_key_vector.max_time_steps()):
+        prod_key_vector = key_update_product(prod_key_vector, i)
+        sigma_i = sign_product(prod_key_vector, message)
+        print("sigma t = "+str(i)+": ", Base64Encoder.encode(sigma_i.encode()))
+        print("\n--------------------------------------------\n")

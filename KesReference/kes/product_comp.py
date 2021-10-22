@@ -11,6 +11,30 @@ class ProductKey:
     def max_time_steps(self) -> int:
         return pow(2, height(self.tau_1) + height(self.tau_2))
 
+    def encode(self):
+        tau_1_bytes = self.tau_1.encode()
+        tau_2_bytes = self.tau_2.encode()
+        sigma_bytes = self.sigma_1.encode()
+        nt1 = len(tau_1_bytes).to_bytes(4, byteorder='big')
+        ns = len(sigma_bytes).to_bytes(4, byteorder='big')
+        return nt1 + tau_1_bytes + ns + sigma_bytes + self.seed + tau_2_bytes
+
+    @classmethod
+    def decode(cls, data: bytes):
+        ptr = 0
+        nt1 = int.from_bytes(data[ptr:ptr+4], byteorder='big')
+        ptr = ptr + 4
+        tau_1 = Node.decode(data[ptr:ptr+nt1])
+        ptr = ptr + nt1
+        ns = int.from_bytes(data[ptr:ptr+4], byteorder='big')
+        ptr = ptr + 4
+        sigma_1 = SumSignature.decode(data[ptr:ptr+ns])
+        ptr = ptr + ns
+        seed = data[ptr:ptr+32]
+        ptr = ptr + 32
+        tau_2 = Node.decode(data[ptr:])
+        return cls(tau_1, sigma_1, seed, tau_2)
+
 
 class ProductSignature:
     def __init__(self, sigma_1: SumSignature, sigma_2: SumSignature, r_2: bytes):

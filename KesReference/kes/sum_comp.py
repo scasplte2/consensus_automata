@@ -1,5 +1,6 @@
 from nacl.encoding import RawEncoder
 from nacl.encoding import HexEncoder
+from nacl.encoding import Base64Encoder
 from nacl.signing import SigningKey
 from nacl.signing import VerifyKey
 from nacl.exceptions import BadSignatureError
@@ -9,6 +10,7 @@ import random
 
 colorama.init()
 heads_up_display = True
+
 
 def hash(msg: bytes) -> bytes:
     digest = blake2b(digest_size=32)
@@ -44,6 +46,49 @@ class Node:
     def get(self):
         return self.value, self.left, self.right
 
+    def encode(self):
+        left = self.left
+        right = self.right
+        if isinstance(left, Node):
+            (sr, wl, wr) = self.value
+            zero = 0
+            return sr + wl + wr + zero.to_bytes(1, byteorder='big') + left.encode()
+        elif isinstance(right, Node):
+            (sr, wl, wr) = self.value
+            one = 1
+            return sr + wl + wr + one.to_bytes(1, byteorder='big') + right.encode()
+        else:
+            (sk, vk) = self.value
+            if isinstance(sk, SigningKey):
+                return sk.encode(encoder=RawEncoder) + vk.encode(encoder=RawEncoder)
+            else:
+                return vk.encode(encoder=RawEncoder)
+
+    @classmethod
+    def decode(cls, data: bytes):
+        if len(data) > 64:
+            ptr = 0
+            sr = data[ptr:ptr+32]
+            ptr = ptr + 32
+            wl = data[ptr:ptr+32]
+            ptr = ptr + 32
+            wr = data[ptr:ptr+32]
+            ptr = ptr + 32
+            b = int.from_bytes(data[ptr:ptr+1], byteorder='big')
+            ptr = ptr + 1
+            if b == 0:
+                return cls((sr, wl, wr), cls.decode(data[ptr:]), None)
+            else:
+                return cls((sr, wl, wr), None, cls.decode(data[ptr:]))
+        else:
+            if len(data) == 32:
+                vk = VerifyKey(data)
+                return cls((None, vk), None, None)
+            else:
+                sk = SigningKey(data[0:32])
+                vk = VerifyKey(data[32:64])
+                return cls((sk, vk), None, None)
+
 
 class SumSignature:
     def __init__(self, vk: bytes, sigma: bytes, w: list[bytes]):
@@ -57,8 +102,8 @@ class SumSignature:
         sigma = data[32:96]
         wd = data[96:]
         w = []
-        for i in range(0, len(wd)//32):
-            wi = wd[32*i:32*(i+1)]
+        for i in range(0, len(wd) // 32):
+            wi = wd[32 * i:32 * (i + 1)]
             w = w + [wi]
         return cls(vk, sigma, w)
 
@@ -103,8 +148,8 @@ def test_signature(vk: VerifyKey, sigma: bytes, m: bytes) -> bool:
 
 
 def doubling_prng(s: bytes) -> (bytes, bytes):
-    sl = hash(b'0'+s)
-    sr = hash(b'1'+s)
+    sl = hash(b'0' + s)
+    sr = hash(b'1' + s)
     return sl, sr
 
 
@@ -123,7 +168,7 @@ def merkle_vk(n: Node) -> Node:
     if n.is_leaf():
         return n
     else:
-        (v,  l,  r) = n.get()
+        (v, l, r) = n.get()
         (vl, ll, lr) = l.get()
         (vr, rl, rr) = r.get()
         nl = merkle_vk(l)
@@ -139,7 +184,7 @@ def merkle_vk(n: Node) -> Node:
             (y, l_nr, r_nr) = nr.get()
             (sx, xl, xr) = x
             (sy, yl, yr) = y
-            return Node((v, hash(xl+xr), hash(yl+yr)), nl, nr)
+            return Node((v, hash(xl + xr), hash(yl + yr)), nl, nr)
 
 
 def reduce_tree(n: Node) -> Node:
@@ -168,12 +213,12 @@ def print_key(n: Node):
     if l is None and isinstance(r, Node):
         (sr, wl, wr) = v
         if heads_up_display:
-            print("1 ", chex(wl), chex(wr), chex(hash(wl+wr)))
+            print("1 ", chex(wl), chex(wr), chex(hash(wl + wr)))
         print_key(r)
     elif r is None and isinstance(l, Node):
         (sr, wl, wr) = v
         if heads_up_display:
-            print("0 ", chex(wl), chex(wr), chex(hash(wl+wr)))
+            print("0 ", chex(wl), chex(wr), chex(hash(wl + wr)))
         print_key(l)
 
 
@@ -217,7 +262,7 @@ def evolve_key(n: Node, t: int) -> Node:
                     return Node(v, None, nr)
                 else:
                     (sr, wl, wr) = v
-                    nr = key_gen_sum(sr, h-1)
+                    nr = key_gen_sum(sr, h - 1)
                     nrp = evolve_key(nr, tp)
                     return Node(v, None, nrp)
             else:
@@ -261,30 +306,30 @@ def verify_sum_signature(r: bytes, sigma_t: SumSignature, t: int, m: bytes) -> b
             wl = hash(vk)
             wr = head
             if heads_up_display:
-                print("0 ", chex(wl), chex(wr), chex(hash(wl+wr)))
+                print("0 ", chex(wl), chex(wr), chex(hash(wl + wr)))
         else:
             wl = head
             wr = hash(vk)
             if heads_up_display:
-                print("1 ", chex(wl), chex(wr), chex(hash(wl+wr)))
+                print("1 ", chex(wl), chex(wr), chex(hash(wl + wr)))
         w = tail
         while len(w) > 0:
             head, *tail = w
-            hp = h-len(w)
-            if (t//pow(2, hp)) % 2 == 0:
-                wl = hash(wl+wr)
+            hp = h - len(w)
+            if (t // pow(2, hp)) % 2 == 0:
+                wl = hash(wl + wr)
                 wr = head
                 if heads_up_display:
-                    print("0 ", chex(wl), chex(wr), chex(hash(wl+wr)))
+                    print("0 ", chex(wl), chex(wr), chex(hash(wl + wr)))
             else:
-                wr = hash(wl+wr)
+                wr = hash(wl + wr)
                 wl = head
                 if heads_up_display:
-                    print("1 ", chex(wl), chex(wr), chex(hash(wl+wr)))
+                    print("1 ", chex(wl), chex(wr), chex(hash(wl + wr)))
             w = tail
         bw = bw and r == hash(wl + wr)
         if heads_up_display:
-            print("vk match?  ", r == hash(wl + wr), chex(r), chex(hash(wl+wr)))
+            print("vk match?  ", r == hash(wl + wr), chex(r), chex(hash(wl + wr)))
     else:
         bw = bw and r == hash(vk)
     verify_key = VerifyKey(vk, encoder=RawEncoder)
