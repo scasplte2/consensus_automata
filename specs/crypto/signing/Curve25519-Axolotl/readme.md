@@ -5,6 +5,13 @@ Message values are same as those specified for [Ed25519](https://datatracker.iet
 
 All values below are Hex encoded byte representations unless otherwise specified.
 
+Table of Contents
+- [Test vector - 1](#test-vector---1)
+- [Test vector - 2](#test-vector---2)
+- [Test vector - 3](#test-vector---3)
+- [Test vector - 4](#test-vector---4)
+- [Test vector - 5](#test-vector---5)
+
 ## Test Vector - 1
 ### Description
 Using an empty message
@@ -23,7 +30,6 @@ Using an empty message
 ```
 AD7B2C434DE419712A55AF65D485DA4F673076D4FDBFF4730A20AA8DC1F0C05AD757F6B50674CFB622131377F29C646DF60C7148E6B8AF33850276F98D31DA0A
 ```
-
 ## Test Vector - 2
 ### Description
 Using a one byte message
@@ -45,7 +51,6 @@ FFBC7BA2E4C43BE03F8A7F020D0651F582AD1901C254EEBB4EC2ECB73148E50D
 ```
 E7D628E6A25AFF86A7A81CF60B40D0C8BCA038A75CB6BEF34B384E5D098C1F291FD7068CDBF001CAF0EB82810B0A13F0B2806E02124E416B671E51241DD4EB0F
 ```
-
 ## Test Vector - 3
 ### Description
 Using a two byte message
@@ -67,7 +72,6 @@ af82
 ```
 12ED7C9B5D757C23809FF620CF0B48CF054F6FC60B8B45B50C49F78C80332D1B4F1DEF16F3270E75686CF12F661CF777EBDCFF2977078D5EEC32F0EB39D11802
 ```
-
 ## Test Vector - 4
 ### Description
 Using a large message (1023 bytes)
@@ -104,7 +108,6 @@ b2eaaa707b4c4185c32eddcdd306705e4dc1ffc872eeee475a64dfac86aba41c0618983f8741c5ef
 ```
 AA9D3EF915F416A85717A00B69C4CB01514AEB9D743259974F36B9EEB429BE4039C0491C68EE3987F493BFB7D54039BA2D03DD8CBF83A1D978E0B18C4C363680
 ```
-
 ## Test Vector - 5
 ### Description
 Using a message that is the digest from SHA512("abc") (string input to SHA utf-8 encoded)
