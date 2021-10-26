@@ -1,4 +1,4 @@
 # Topl Cryptography Reference and Specifications
 This repository serves as a central definition of the cryptographic primitives utilized and implemented by the Topl protocol. All libraries, tooling, and client-facing utilities should conform to these specifications in order to correctly interact with the Topl blockchain network. Furthermore, protocol definitions (in the form of papers and code) are also included to standardize the construction of higher-order utilities from their underlying primitives.
 
-*NOTE*: This repository is still a work in progress and test vectors should not be considered stable until an initial release is established.
+*NOTE*: This repository is still a work in progress and test vectors should not be considered stable until an initial release is available.

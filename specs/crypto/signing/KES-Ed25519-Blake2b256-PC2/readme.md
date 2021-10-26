@@ -5,7 +5,7 @@ All values below are Hex encoded byte representations unless otherwise specified
 
 ## Test Vector - 1
 ### Description
-Generate and verfy a specified signature at `t=0` using a provided seed, message, and height
+Generate and verify a specified signature at `t=0` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
