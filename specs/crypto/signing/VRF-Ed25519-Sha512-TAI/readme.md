@@ -3,6 +3,11 @@ Test vectors for Topl implementation of [ECVRF-EDWARDS25519-SHA512-TAI](https://
 
 All values below are Hex encoded byte representations unless otherwise specified.
 
+Table of Contents
+- [Test vector - 1](#test-vector---1)
+- [Test vector - 2](#test-vector---2)
+- [Test vector - 3](#test-vector---3)
+
 ## Test Vector - 1
 ### Description
 Using empty input alpha

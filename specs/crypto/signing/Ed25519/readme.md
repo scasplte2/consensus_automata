@@ -3,6 +3,13 @@ Test vectors for Topl implementation of Ed25519 signature routine. Test vector v
 
 All values below are Hex encoded byte representations unless otherwise specified.
 
+Table of Contents
+- [Test vector - 1](#test-vector---1)
+- [Test vector - 2](#test-vector---2)
+- [Test vector - 3](#test-vector---3)
+- [Test vector - 4](#test-vector---4)
+- [Test vector - 5](#test-vector---5)
+
 ## Test Vector - 1
 ### Description
 Using an empty message
@@ -21,7 +28,6 @@ d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a
 ```
 e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b
 ```
-
 ## Test Vector - 2
 ### Description
 Using a one byte message
@@ -43,7 +49,6 @@ Using a one byte message
 ```
 92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00
 ```
-
 ## Test Vector - 3
 ### Description
 Using a two byte message
@@ -65,7 +70,6 @@ fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025
 ```
 6291d657deec24024827e69c3abe01a30ce548a284743a445e3680d7db5ac3ac18ff9b538d16f290ae67f760984dc6594a7c15e9716ed28dc027beceea1ec40a
 ```
-
 ## Test Vector - 4
 ### Description
 Using a large message (1023 bytes)
@@ -102,7 +106,6 @@ b2eaaa707b4c4185c32eddcdd306705e4dc1ffc872eeee475a64dfac86aba41c0618983f8741c5ef
 ```
 0aab4c900501b3e24d7cdf4663326a3a87df5e4843b2cbdb67cbf6e460fec350aa5371b1508f9f4528ecea23c436d94b5e8fcd4f681e30a6ac00a9704a188a03
 ```
-
 ## Test Vector - 5
 ### Description
 Using a message that is the digest from SHA512("abc") (string input to SHA utf-8 encoded)
