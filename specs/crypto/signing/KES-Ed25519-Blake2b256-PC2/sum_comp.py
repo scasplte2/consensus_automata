@@ -116,11 +116,11 @@ class SumSignature:
         return out
 
     def print(self):
-        print("Verification Key: ["+self.vk.hex()+"]")
-        print("Sigma: ["+print_split(self.sigma.hex())+"]")
+        print("    Verification Key: ["+self.vk.hex()+"]")
+        print("    Sigma: ["+self.sigma.hex()+"]")
         i = 0
         for wi in self.w:
-            print("W["+str(i)+"]: ["+wi.hex()+"]")
+            print("    W["+str(i)+"]: ["+wi.hex()+"]")
             i = i + 1
 
 
@@ -154,25 +154,25 @@ def print_key(n: Node):
 
 def print_vector(n: Node):
     (v, l, r) = n.get()
-    print("Height:", height(n))
+    print("    Height:", height(n))
     if l is None and isinstance(r, Node):
         (sr, wl, wr) = v
-        print("Binary configuration: 1")
-        print("Right Seed:    ["+sr.hex()+"]")
-        print("Left Witness:  ["+wl.hex()+"]")
-        print("Right Witness: ["+wr.hex()+"]")
+        print("    Binary configuration: 1")
+        print("    Right Seed:    ["+sr.hex()+"]")
+        print("    Left Witness:  ["+wl.hex()+"]")
+        print("    Right Witness: ["+wr.hex()+"]")
         print_vector(r)
     elif r is None and isinstance(l, Node):
         (sr, wl, wr) = v
-        print("Binary configuration: 0")
-        print("Right Seed:    ["+sr.hex()+"]")
-        print("Left Witness:  ["+wl.hex()+"]")
-        print("Right Witness: ["+wr.hex()+"]")
+        print("    Binary configuration: 0")
+        print("    Right Seed:    ["+sr.hex()+"]")
+        print("    Left Witness:  ["+wl.hex()+"]")
+        print("    Right Witness: ["+wr.hex()+"]")
         print_vector(l)
     else:
         (sk, vk) = v
-        print("Ed25519 Secret Key:       ["+sk.encode().hex()+"]")
-        print("Ed25519 Verification Key: ["+vk.encode().hex()+"]")
+        print("    Ed25519 Secret Key:       ["+sk.encode().hex()+"]")
+        print("    Ed25519 Verification Key: ["+vk.encode().hex()+"]")
 
 
 def height(n) -> int:

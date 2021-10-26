@@ -35,6 +35,16 @@ class ProductKey:
         tau_2 = Node.decode(data[ptr:])
         return cls(tau_1, sigma_1, seed, tau_2)
 
+    def print(self):
+        print("Tau 1:")
+        print_vector(self.tau_1)
+        print("Sigma 1:")
+        self.sigma_1.print()
+        print("Seed:")
+        print("    "+self.seed.hex())
+        print("Tau 2:")
+        print_vector(self.tau_2)
+
 
 class ProductSignature:
     def __init__(self, sigma_1: SumSignature, sigma_2: SumSignature, r_2: bytes):
@@ -63,8 +73,7 @@ class ProductSignature:
         self.sigma_1.print()
         print("Sigma 2:")
         self.sigma_2.print()
-        print("R2:")
-        print("["+self.r_2.hex()+"]")
+        print("R 2: ["+self.r_2.hex()+"]")
 
 
 def erase_leaf_sk(n: Node) -> Node:

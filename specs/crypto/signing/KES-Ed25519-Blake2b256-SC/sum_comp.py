@@ -117,7 +117,7 @@ class SumSignature:
 
     def print(self):
         print("Verification Key: ["+self.vk.hex()+"]")
-        print("Sigma: ["+print_split(self.sigma.hex())+"]")
+        print("Sigma: ["+self.sigma.hex()+"]")
         i = 0
         for wi in self.w:
             print("W["+str(i)+"]: ["+wi.hex()+"]")
