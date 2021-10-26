@@ -58,11 +58,19 @@ class ProductSignature:
     def get(self) -> (SumSignature, SumSignature, bytes):
         return self.sigma_1, self.sigma_2, self.r_2
 
+    def print(self):
+        print("Sigma 1:")
+        self.sigma_1.print()
+        print("Sigma 2:")
+        self.sigma_2.print()
+        print("R2:")
+        print("["+self.r_2.hex()+"]")
+
 
 def erase_leaf_sk(n: Node) -> Node:
     if n.is_leaf():
         (sk, vk) = n.value
-        return Node((None, vk), None, None)
+        return Node((SigningKey(bytes(32)), vk), None, None)
     else:
         if n.left is None and isinstance(n.right, Node):
             return Node(n.value, None, erase_leaf_sk(n.right))
