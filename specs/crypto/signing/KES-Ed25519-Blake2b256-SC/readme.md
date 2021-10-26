@@ -5,7 +5,7 @@ All values below are Hex encoded byte representations unless otherwise specified
 
 ## Test Vector - 1
 ### Description
-Generate and verfy a specified signature at `t=0` using a provided seed, message, and height
+Generate and verify a specified signature at `t=0` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -43,7 +43,7 @@ witness:
 ```
 ## Test Vector - 2
 ### Description
-Generate and verfy a specified signature at `t=1` using a provided seed, message, and height
+Generate and verify a specified signature at `t=1` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -81,7 +81,7 @@ witness:
 ```
 ## Test Vector - 3
 ### Description
-Generate and verfy a specified signature at `t=10` using a provided seed, message, and height
+Generate and verify a specified signature at `t=10` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -119,7 +119,7 @@ witness:
 ```
 ## Test Vector - 4
 ### Description
-Generate and verfy a specified signature at `t=100` using a provided seed, message, and height
+Generate and verify a specified signature at `t=100` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -157,7 +157,7 @@ witness:
 ```
 ## Test Vector - 5
 ### Description
-Generate and verfy a specified signature at `t=0` using a provided seed, message, and height
+Generate and verify a specified signature at `t=0` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -190,7 +190,7 @@ witness:
 ```
 ## Test Vector - 6
 ### Description
-Generate and verfy a specified signature at `t=1` using a provided seed, message, and height
+Generate and verify a specified signature at `t=1` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -223,7 +223,7 @@ witness:
 ```
 ## Test Vector - 7
 ### Description
-Generate and verfy a specified signature at `t=2` using a provided seed, message, and height
+Generate and verify a specified signature at `t=2` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -256,7 +256,7 @@ witness:
 ```
 ## Test Vector - 8
 ### Description
-Generate and verfy a specified signature at `t=3` using a provided seed, message, and height
+Generate and verify a specified signature at `t=3` using a provided seed, message, and height
 ### Inputs
 - seed
 ```

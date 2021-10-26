@@ -1,5 +1,5 @@
 ## Description
-Test vectors for Topl implementation of a two tree product key evolving signature in the construction of [Malkin-Micciancio-Miner](https://cseweb.ucsd.edu/~daniele/papers/MMM.pdf). A full specification including protocol box descriptions is available at ???.
+Test vectors for Topl implementation of a two tree product key evolving signature in the construction of [Malkin-Micciancio-Miner](https://cseweb.ucsd.edu/~daniele/papers/MMM.pdf). A full specification including protocol box descriptions is available at `papers/kes_formal_spec`
 
 All values below are Hex encoded byte representations unless otherwise specified.
 
@@ -52,7 +52,7 @@ subRoot: 7c90e4b7fee6254fd3b19a93da32fe4b38f16b5f16c6362cf5e45d184275bc19
 ```
 ## Test Vector - 2
 ### Description
-Generate and verfy a specified signature at `t=100` using a provided seed, message, and height
+Generate and verify a specified signature at `t=100` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -99,7 +99,7 @@ subRoot: 7c90e4b7fee6254fd3b19a93da32fe4b38f16b5f16c6362cf5e45d184275bc19
 ```
 ## Test Vector - 3
 ### Description
-Generate and verfy a specified signature at `t=1000` using a provided seed, message, and height
+Generate and verify a specified signature at `t=1000` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -146,7 +146,7 @@ subRoot: 81d4b9ff3f266b3b996f58a16b779670af9ecab3039c992459a1756a4fc469fb
 ```
 ## Test Vector - 4
 ### Description
-Generate and verfy a specified signature at `t=10000` using a provided seed, message, and height
+Generate and verify a specified signature at `t=10000` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -193,7 +193,7 @@ subRoot: 893a6b48cb64151193e14c884b27aa48f4bd117024314e3a05c1c3482f9d248d
 ```
 ## Test Vector - 5
 ### Description
-Generate and verfy a specified signature at `t=0` using a provided seed, message, and height
+Generate and verify a specified signature at `t=0` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -230,7 +230,7 @@ subRoot: d6d40e62a4657e8b787bf95e48be0294815dc219d6b6cc706f14cffe20283df5
 ```
 ## Test Vector - 6
 ### Description
-Generate and verfy a specified signature at `t=1` using a provided seed, message, and height
+Generate and verify a specified signature at `t=1` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -267,7 +267,7 @@ subRoot: d6d40e62a4657e8b787bf95e48be0294815dc219d6b6cc706f14cffe20283df5
 ```
 ## Test Vector - 7
 ### Description
-Generate and verfy a specified signature at `t=2` using a provided seed, message, and height
+Generate and verify a specified signature at `t=2` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -304,7 +304,7 @@ subRoot: d6d40e62a4657e8b787bf95e48be0294815dc219d6b6cc706f14cffe20283df5
 ```
 ## Test Vector - 8
 ### Description
-Generate and verfy a specified signature at `t=3` using a provided seed, message, and height
+Generate and verify a specified signature at `t=3` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -341,7 +341,7 @@ subRoot: d6d40e62a4657e8b787bf95e48be0294815dc219d6b6cc706f14cffe20283df5
 ```
 ## Test Vector - 9
 ### Description
-Generate and verfy a specified signature at `t=4` using a provided seed, message, and height
+Generate and verify a specified signature at `t=4` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -377,7 +377,7 @@ subRoot: c3a937f515f361c521b981e9490183ef09b7ece84d70f3ccbfaade0193765939
 ```
 ## Test Vector - 10
 ### Description
-Generate and verfy a specified signature at `t=5` using a provided seed, message, and height
+Generate and verify a specified signature at `t=5` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -414,7 +414,7 @@ subRoot: c3a937f515f361c521b981e9490183ef09b7ece84d70f3ccbfaade0193765939
 ```
 ## Test Vector - 11
 ### Description
-Generate and verfy a specified signature at `t=6` using a provided seed, message, and height
+Generate and verify a specified signature at `t=6` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -451,7 +451,7 @@ subRoot: c3a937f515f361c521b981e9490183ef09b7ece84d70f3ccbfaade0193765939
 ```
 ## Test Vector - 12
 ### Description
-Generate and verfy a specified signature at `t=7` using a provided seed, message, and height
+Generate and verify a specified signature at `t=7` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -488,7 +488,7 @@ subRoot: c3a937f515f361c521b981e9490183ef09b7ece84d70f3ccbfaade0193765939
 ```
 ## Test Vector - 13
 ### Description
-Generate and verfy a specified signature at `t=8` using a provided seed, message, and height
+Generate and verify a specified signature at `t=8` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -525,7 +525,7 @@ subRoot: b7bf456b91cf1ee2fe2e53b85a7c05699001838ddde1a0bfc02b82ad0ff48afe
 ```
 ## Test Vector - 14
 ### Description
-Generate and verfy a specified signature at `t=9` using a provided seed, message, and height
+Generate and verify a specified signature at `t=9` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -562,7 +562,7 @@ subRoot: b7bf456b91cf1ee2fe2e53b85a7c05699001838ddde1a0bfc02b82ad0ff48afe
 ```
 ## Test Vector - 15
 ### Description
-Generate and verfy a specified signature at `t=10` using a provided seed, message, and height
+Generate and verify a specified signature at `t=10` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -599,7 +599,7 @@ subRoot: b7bf456b91cf1ee2fe2e53b85a7c05699001838ddde1a0bfc02b82ad0ff48afe
 ```
 ## Test Vector - 16
 ### Description
-Generate and verfy a specified signature at `t=11` using a provided seed, message, and height
+Generate and verify a specified signature at `t=11` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -636,7 +636,7 @@ subRoot: b7bf456b91cf1ee2fe2e53b85a7c05699001838ddde1a0bfc02b82ad0ff48afe
 ```
 ## Test Vector - 17
 ### Description
-Generate and verfy a specified signature at `t=12` using a provided seed, message, and height
+Generate and verify a specified signature at `t=12` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -673,7 +673,7 @@ subRoot: b54941cdab70926043c01528a6f2140becf23bbb54a6967c1c03deeccc4d9552
 ```
 ## Test Vector - 18
 ### Description
-Generate and verfy a specified signature at `t=13` using a provided seed, message, and height
+Generate and verify a specified signature at `t=13` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -710,7 +710,7 @@ subRoot: b54941cdab70926043c01528a6f2140becf23bbb54a6967c1c03deeccc4d9552
 ```
 ## Test Vector - 19
 ### Description
-Generate and verfy a specified signature at `t=14` using a provided seed, message, and height
+Generate and verify a specified signature at `t=14` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
@@ -747,7 +747,7 @@ subRoot: b54941cdab70926043c01528a6f2140becf23bbb54a6967c1c03deeccc4d9552
 ```
 ## Test Vector - 20
 ### Description
-Generate and verfy a specified signature at `t=15` using a provided seed, message, and height
+Generate and verify a specified signature at `t=15` using a provided seed, message, and height
 ### Inputs
 - seed
 ```
