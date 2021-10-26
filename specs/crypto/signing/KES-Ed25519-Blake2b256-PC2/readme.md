@@ -3,6 +3,7 @@ Test vectors for Topl implementation of a two tree product key evolving signatur
 
 All values below are Hex encoded byte representations unless otherwise specified.
 
+Table of Contents
 - [Test vector - 1](#test-vector---1)
 - [Test vector - 2](#test-vector---2)
 - [Test vector - 3](#test-vector---3)
