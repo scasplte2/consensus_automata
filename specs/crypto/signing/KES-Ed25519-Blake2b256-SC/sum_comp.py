@@ -206,8 +206,8 @@ def test_signature(vk: VerifyKey, sigma: bytes, m: bytes) -> bool:
 
 
 def doubling_prng(s: bytes) -> (bytes, bytes):
-    sl = hash(bytes(0x00) + s)
-    sr = hash(bytes(0x01) + s)
+    sl = hash(bytes([0x00]) + s)
+    sr = hash(bytes([0x01]) + s)
     return sl, sr
 
 
