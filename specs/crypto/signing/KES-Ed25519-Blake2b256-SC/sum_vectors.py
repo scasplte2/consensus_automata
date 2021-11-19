@@ -95,10 +95,10 @@ def sum_test_vector(message: str, seed_str: str, h: int, t_range: list[int], tes
         print("```")
         sigma.print()
         print("```")
-    print("- Sum Composition Secret Key, t = "+str(key_time_sum(sum_key))+":")
-    print("```")
-    print_vector(sum_key)
-    print("```")
+        print("- Sum Composition Secret Key, t = "+str(key_time_sum(sum_key))+":")
+        print("```")
+        print_vector(sum_key)
+        print("```")
 
 
 sum_test_vector(messages[0], seeds[0], 1, [0, 1], 1)

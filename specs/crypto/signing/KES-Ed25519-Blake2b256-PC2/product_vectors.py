@@ -97,10 +97,10 @@ def product_test_vector(message: str, seed_str: str, h1: int, h2: int, t_range: 
         print("```")
         sigma.print()
         print("```")
-    print("Product Composition Secret Key, t = "+str(key_time_product(product_key))+":")
-    print("```")
-    product_key.print()
-    print("```")
+        print("Product Composition Secret Key, t = "+str(key_time_product(product_key))+":")
+        print("```")
+        product_key.print()
+        print("```")
 
 
 product_test_vector(messages[10], seeds[10], 1, 1, [0, 1, 2, 3], 1)
