@@ -7,6 +7,7 @@ from mpl_toolkits import mplot3d
 from matplotlib.widgets import AxesWidget, RadioButtons
 
 trunc_error = 1.0e-4
+max_iter = 3000
 total_slots = 100000
 slots = np.arange(total_slots)
 ys = np.random.rand(total_slots)
@@ -75,8 +76,8 @@ class MyRadioButtons(RadioButtons):
             self.set_active(self.circles.index(event.artist))
 
 
-def grinding_frequency(input):
-    (branch_depth, r, gamma, slot_gap, fa, fb) = input
+def grinding_frequency(arg):
+    (bd, r, gamma, slot_gap, fa, fb) = arg
     if r == 0.0:
         return 0.0
 
@@ -123,7 +124,7 @@ def grinding_frequency(input):
                     if entry[1] > branch_max[slot]:
                         branch_max[slot] = entry[1]
                         max_block_num = max(max_block_num, branch_max[slot])
-        branches = np.array(list(filter(lambda x: max_block_num - x[1] < branch_depth, list(branch_max.items()))))
+        branches = np.array(list(filter(lambda x: max_block_num - x[1] < bd, list(branch_max.items()))))
         i = i + 1
     max_l = 0
     for branch in branches:
@@ -183,7 +184,7 @@ if __name__ == '__main__':
         elif d < 1:
             return 0.0, 1.0
         elif d == 1:
-            return 1.0 - np.power(1.0 - f(d), r), 1.0
+            return 1.0 - np.power(max(1.0 - f(d), 0.0), r), 1.0
         else:
             out2 = np.power(max(1.0 - f(d-1), 0.0), r) * acc
             out1 = (1.0 - np.power(max(1.0 - f(d), 0.0), r)) * out2
@@ -197,11 +198,11 @@ if __name__ == '__main__':
             done = False
             old_value = 0.0
             accumulation = 0.0
-            while not done:
+            while not done and i < max_iter:
                 i = i + 1
                 (nd, accumulation) = n_d_acc(i, r, gamma, slot_gap, fa, fb, delay, accumulation)
                 new = i * nd
-                if new < trunc_error and old_value > 0.0:
+                if trunc_error > new > 0.0 and old_value > 0.0:
                     done = True
                 res = res + new
                 old_value = new
@@ -261,8 +262,11 @@ if __name__ == '__main__':
             if sign > 0.0 and c1 - c2 > 0.0 or sign < 0.0 and c1 - c2 < 0.0:
                 i = i + 1
             else:
-                return line_intersection(([x_axis[i], curve1[i]], [x_axis[i + 1], curve1[i + 1]]),
-                                         ([x_axis[i], curve2[i]], [x_axis[i + 1], curve2[i + 1]]))
+                if i+1 < len(x_axis):
+                    return line_intersection(([x_axis[i], curve1[i]], [x_axis[i + 1], curve1[i + 1]]),
+                                             ([x_axis[i], curve2[i]], [x_axis[i + 1], curve2[i + 1]]))
+                else:
+                    return x_axis[len(x_axis)-1], 0.0
 
 
     (inter_x, inter_y) = find_intersection(a_init_data, r_init_data, r_axis)
@@ -295,46 +299,109 @@ if __name__ == '__main__':
 
     fig2 = plt.figure(2)
     ax2 = plt.axes(projection='3d')
-
-    nx, ny = (10, 10)
+    rax = plt.axes([0.05, 0.95, 0.9, 0.05])
+    radio = MyRadioButtons(rax, ['fa', 'fb', 'gamma', 'slot gap', 'delay'], active=0, activecolor='crimson',
+                           orientation="horizontal")
+    gamma_max = 100
+    nx, ny = (15, 15)
     xx = np.linspace(0.0, 1.0, nx)
     yy = np.linspace(0.0, 1.0, ny)
+    yyi = np.arange(0, gamma_max, gamma_max/ny)
 
     zv = np.empty([nx, ny])
     zv2 = np.empty([nx, ny])
+    pb3d = np.empty([3, ny])
+    zv.fill(0.0)
+    zv2.fill(0.0)
+    pb3d.fill(0.0)
     xv, yv = np.meshgrid(xx, yy)
+    _, yvi = np.meshgrid(xx, yyi)
 
-    cont = ax2.contour3D(xv, yv, zv, 50, cmap='winter')
+    surf1 = ax2.plot_surface(xv, yv, zv, zorder=0.3)
+    surf2 = ax2.plot_surface(xv, yv, zv, zorder=0.2)
+    scatter = ax2.scatter(pb3d[0, :], pb3d[1, :], pb3d[2, :], color='black', marker='x', zorder=0.1)
+
     ax2.set_xlabel('r')
-    ax2.set_ylabel('fa')
-    ax2.set_zlabel('Honest freq.')
+    ax2.set_zlabel('Block Frequency')
+    radio_var = 'fa'
 
-    def update_cont():
-        global cont
-        for i in range(nx):
+
+    def update_cont(label):
+        global surf1, surf2, scatter, radio_var
+        ch = 'winter'
+        ca = 'autumn'
+        surf1.remove()
+        surf2.remove()
+        radio_var = label
+        if radio_var == 'gamma':
+            for i in range(nx):
+                for j in range(ny):
+                    zv[j, i] = block_frequency(xv[j, i], yvi[j, i], s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val)
+                    zv2[j, i] = block_frequency(1.0-xv[j, i], yvi[j, i], s_slot_gap.val, s_fa.val, s_fb.val, 0)
             for j in range(ny):
-                # zv[j, i] = block_frequency(xv[j, i], s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val)
-                zv[j, i] = block_frequency(xv[j, i], s_gamma.val, s_slot_gap.val, yv[j, i], s_fb.val, s_delay.val)
-
-        for c in cont.collections:
-            c.remove()
-        cont = ax2.contour3D(xv, yv, zv, 50, cmap='winter')
-        ax2.relim()
-        ax2.autoscale_view()
-        plt.show(block=False)
-
-
-    def update_cont_grind():
-        global cont
-        for i in range(nx):
-            new_data = mp_grinding_frequency(xx, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val)
+                pbx, pbz = find_intersection(zv[j, :], zv2[j, :], xv[j, :])
+                pb3d[0, j] = pbx
+                pb3d[1, j] = yvi[j, 0]
+                pb3d[2, j] = pbz
+            surf1 = ax2.plot_surface(xv, yvi, zv, linewidth=0, antialiased=True, cmap=ch, alpha=0.5)
+            surf2 = ax2.plot_surface(xv, yvi, zv2, linewidth=0, antialiased=True, cmap=ca, alpha=0.5)
+            scatter._offsets3d = (pb3d[0, :], pb3d[1, :], pb3d[2, :])
+        if radio_var == 'slot gap':
+            for i in range(nx):
+                for j in range(ny):
+                    zv[j, i] = block_frequency(xv[j, i], s_gamma.val, yvi[j, i], s_fa.val, s_fb.val, s_delay.val)
+                    zv2[j, i] = block_frequency(1.0-xv[j, i], s_gamma.val, yvi[j, i], s_fa.val, s_fb.val, 0)
             for j in range(ny):
-                # zv[j, i] = block_frequency(xv[j, i], s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val)
-                zv2[j, i] = block_frequency(xv[j, i], s_gamma.val, s_slot_gap.val, yv[j, i], s_fb.val, s_delay.val)
-
-        cont = ax2.contour3D(xv, yv, zv2, 50, cmap='winter')
+                pbx, pbz = find_intersection(zv[j, :], zv2[j, :], xv[j, :])
+                pb3d[0, j] = pbx
+                pb3d[1, j] = yvi[j, 0]
+                pb3d[2, j] = pbz
+            surf1 = ax2.plot_surface(xv, yvi, zv, linewidth=0, antialiased=True, cmap=ch, alpha=0.5)
+            surf2 = ax2.plot_surface(xv, yvi, zv2, linewidth=0, antialiased=True, cmap=ca, alpha=0.5)
+            scatter._offsets3d = (pb3d[0, :], pb3d[1, :], pb3d[2, :])
+        if radio_var == 'fa':
+            for i in range(nx):
+                for j in range(ny):
+                    zv[j, i] = block_frequency(xv[j, i], s_gamma.val, s_slot_gap.val, yv[j, i], s_fb.val, s_delay.val)
+                    zv2[j, i] = block_frequency(1.0-xv[j, i], s_gamma.val, s_slot_gap.val, yv[j, i], s_fb.val, 0)
+            for j in range(ny):
+                pbx, pbz = find_intersection(zv[j, :], zv2[j, :], xv[j, :])
+                pb3d[0, j] = pbx
+                pb3d[1, j] = yv[j, 0]
+                pb3d[2, j] = pbz
+            surf1 = ax2.plot_surface(xv, yv, zv, linewidth=0, antialiased=True, cmap=ch, alpha=0.5)
+            surf2 = ax2.plot_surface(xv, yv, zv2, linewidth=0, antialiased=True, cmap=ca, alpha=0.5)
+            scatter._offsets3d = (pb3d[0, :], pb3d[1, :], pb3d[2, :])
+        if radio_var == 'fb':
+            for i in range(nx):
+                for j in range(ny):
+                    zv[j, i] = block_frequency(xv[j, i], s_gamma.val, s_slot_gap.val, s_fa.val, yv[j, i], s_delay.val)
+                    zv2[j, i] = block_frequency(1.0-xv[j, i], s_gamma.val, s_slot_gap.val, s_fa.val, yv[j, i], 0)
+            for j in range(ny):
+                pbx, pbz = find_intersection(zv[j, :], zv2[j, :], xv[j, :])
+                pb3d[0, j] = pbx
+                pb3d[1, j] = yv[j, 0]
+                pb3d[2, j] = pbz
+            surf1 = ax2.plot_surface(xv, yv, zv, linewidth=0, antialiased=True, cmap=ch, alpha=0.5)
+            surf2 = ax2.plot_surface(xv, yv, zv2, linewidth=0, antialiased=True, cmap=ca, alpha=0.5)
+            scatter._offsets3d = (pb3d[0, :], pb3d[1, :], pb3d[2, :])
+        if radio_var == 'delay':
+            for i in range(nx):
+                for j in range(ny):
+                    zv[j, i] = block_frequency(xv[j, i], s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, yvi[j, i])
+                    zv2[j, i] = block_frequency(1.0-xv[j, i], s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, 0)
+            for j in range(ny):
+                pbx, pbz = find_intersection(zv[j, :], zv2[j, :], xv[j, :])
+                pb3d[0, j] = pbx
+                pb3d[1, j] = yvi[j, 0]
+                pb3d[2, j] = pbz
+            surf1 = ax2.plot_surface(xv, yvi, zv, linewidth=0, antialiased=True, cmap=ch, alpha=0.5)
+            surf2 = ax2.plot_surface(xv, yvi, zv2, linewidth=0, antialiased=True, cmap=ca, alpha=0.5)
+            scatter._offsets3d = (pb3d[0, :], pb3d[1, :], pb3d[2, :])
+        ax2.set_ylabel(label)
         ax2.relim()
-        ax2.autoscale_view()
+        ax2.autoscale_view(tight=True)
+        ax2.set_zlim3d(0.0, min(1.0, max(np.amax(zv), np.amax(zv2))))
         plt.show(block=False)
 
 
@@ -356,7 +423,7 @@ if __name__ == '__main__':
         ax[0].autoscale_view()
         ax[1].relim()
         ax[1].autoscale_view()
-        update_cont()
+        update_cont(radio_var)
         fig.suptitle("Participation Bound = " + "{:.2f}".format(1.0 - new_inter_x))
 
 
@@ -378,7 +445,7 @@ if __name__ == '__main__':
         ax[0].autoscale_view()
         ax[1].relim()
         ax[1].autoscale_view()
-        update_cont()
+        update_cont(radio_var)
         fig.suptitle("Participation Bound = " + "{:.2f}".format(1.0 - new_inter_x))
 
 
@@ -398,7 +465,7 @@ if __name__ == '__main__':
         ax[0].autoscale_view()
         ax[1].relim()
         ax[1].autoscale_view()
-        update_cont()
+        update_cont(radio_var)
         fig.suptitle("Participation Bound = " + "{:.2f}".format(1.0 - new_inter_x))
 
 
@@ -418,7 +485,7 @@ if __name__ == '__main__':
         ax[0].autoscale_view()
         ax[1].relim()
         ax[1].autoscale_view()
-        update_cont()
+        update_cont(radio_var)
         fig.suptitle("Participation Bound = " + "{:.2f}".format(1.0 - new_inter_x))
 
 
@@ -440,7 +507,7 @@ if __name__ == '__main__':
         ax[0].autoscale_view()
         ax[1].relim()
         ax[1].autoscale_view()
-        update_cont()
+        update_cont(radio_var)
         fig.suptitle("Participation Bound = " + "{:.2f}".format(1.0 - new_inter_x))
 
 
@@ -461,16 +528,17 @@ if __name__ == '__main__':
         ax[0].autoscale_view()
         ax[1].relim()
         ax[1].autoscale_view()
-        update_cont()
+        update_cont(radio_var)
         fig.suptitle("Participation Bound = " + "{:.2f}".format(1.0 - new_inter_x))
 
 
-    update_cont()
+    update_cont(radio_var)
     s_gamma.on_changed(update_gamma)
     s_slot_gap.on_changed(update_slot_gap)
     s_fa.on_changed(update_fa)
     s_fb.on_changed(update_fb)
     s_delay.on_changed(update_delay)
     b_grind.on_clicked(update_grind)
+    radio.on_clicked(update_cont)
 
     plt.show()
