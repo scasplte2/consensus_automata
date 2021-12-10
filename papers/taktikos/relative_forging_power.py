@@ -6,12 +6,19 @@ import multiprocessing as mp
 from mpl_toolkits import mplot3d
 from matplotlib.widgets import AxesWidget, RadioButtons
 
+gamma_max = 100
 trunc_error = 1.0e-4
 max_iter = 3000
 total_slots = 100000
 slots = np.arange(total_slots)
 ys = np.random.rand(total_slots)
 branch_depth = 2
+nx, ny = (10, 10)
+gamma_init = 0
+fa_init = 0.5
+fb_init = 0.05
+slot_gap_init = 0
+delay_init = 0
 
 
 class MyRadioButtons(RadioButtons):
@@ -172,23 +179,98 @@ if __name__ == '__main__':
 
     def n_d_acc(d, r, gamma, slot_gap, fa, fb, delay, acc):
         def f(x):
-            if x < slot_gap + 1:
+            if x <= slot_gap or x <= delay:
                 return 0.0
-            elif x < gamma + 1:
+            elif x <= gamma:
                 return fa * (float(x - slot_gap)) / float(gamma - slot_gap)
             else:
                 return fb
-
-        if d < delay + 1:
-            return 0.0, 1.0
-        elif d < 1:
-            return 0.0, 1.0
-        elif d == 1:
+        if d == 1:
             return 1.0 - np.power(max(1.0 - f(d), 0.0), r), 1.0
         else:
             out2 = np.power(max(1.0 - f(d-1), 0.0), r) * acc
             out1 = (1.0 - np.power(max(1.0 - f(d), 0.0), r)) * out2
             return out1, out2
+
+    def n_d_acc_pow(d, r, gamma, slot_gap, fa, fb, delay, acc):
+        def f(x, y):
+            if y <= delay:
+                return 0.0
+            else:
+                return fb*x
+        if d == 1:
+            return f(r, d), 1.0
+        else:
+            out2 = (1.0 - f(r, d)) * acc
+            out1 = f(r, d) * out2
+            return out1, out2
+
+    def block_frequency_pi(r, gamma, slot_gap, fa, fb, delay):
+        if r > 0.0:
+            def f(x):
+                if x < slot_gap + 1 or x < delay + 1:
+                    return 0.0
+                elif x < gamma + 1:
+                    return fa * (float(x - slot_gap)) / float(gamma - slot_gap)
+                else:
+                    return fb
+            ns = max(gamma, slot_gap, delay) + 1
+            pi = np.empty([ns])
+            pbar = np.empty([ns])
+            prev = 1.0
+            for i in range(ns):
+                new = np.power(1.0 - f(i+1), r) * prev
+                pbar[i] = new
+                prev = new
+
+            c1 = 1.0 + sum(pbar[:ns-3]) + pbar[ns-2]/(1.0 - np.power(1.0 - f(gamma+1), r))
+            cgp1 = (1.0 - np.power(1.0 - f(gamma+1), r)) * (1.0 + sum(pbar[:ns-2])) + pbar[ns-1]
+            for i in range(ns):
+                if i == gamma:
+                    pi[i] = pbar[i]/cgp1
+                else:
+                    pi[i] = pbar[i]/c1
+            print(c1, cgp1)
+            print(pi, r, gamma, slot_gap, fa, fb, delay)
+            if not 0.98 < sum(pi) < 1.02:
+                print(sum(pi))
+                quit()
+            res = 0.0
+            for i in range(ns):
+                if i == ns-1:
+                    res = res  # + pi[i] * (gamma + 1.0 + 1.0/(r*np.log(1-fb)))
+                else:
+                    res = res + (1.0 - np.power(max(1.0 - f(i+1), 0.0), r)) * pi[i] * (i + 1)
+            return 1.0 / res
+        else:
+            return 0.0
+
+
+    def block_frequency_tail(r, gamma, slot_gap, fa, fb, delay):
+        if r > 0.0:
+            block_time = 0.0
+            accumulation = 0.0
+            ns = int(max(gamma, slot_gap, delay) + 1)
+            pdf = np.empty([ns])
+            for i in range(ns):
+                (nd, accumulation) = n_d_acc(i+1, r, gamma, slot_gap, fa, fb, delay, accumulation)
+                pdf[i] = nd
+            norm = sum(pdf)
+            pdf = pdf/norm
+            i = 0
+            for nd in pdf:
+                i = i + 1
+                if i == ns:
+                    block_time = block_time + (ns + 1.0/(r*np.log(1.0/(1.0 - fb))))
+                else:
+                    block_time = block_time + i * nd
+
+            if block_time > 0.0:
+                return 1.0 / block_time
+            else:
+                return 0.0
+        else:
+            return 0.0
 
 
     def block_frequency(r, gamma, slot_gap, fa, fb, delay):
@@ -198,14 +280,20 @@ if __name__ == '__main__':
             done = False
             old_value = 0.0
             accumulation = 0.0
+            pdf = []
             while not done and i < max_iter:
                 i = i + 1
                 (nd, accumulation) = n_d_acc(i, r, gamma, slot_gap, fa, fb, delay, accumulation)
-                new = i * nd
+                # new = i * nd
+                pdf.append(nd)
+                new = nd
                 if trunc_error > new > 0.0 and old_value > 0.0:
                     done = True
-                res = res + new
                 old_value = new
+            i = 0
+            for nd in pdf:
+                i = i + 1
+                res = res + i * nd
             if res > 0.0:
                 return 1.0 / res
             else:
@@ -213,14 +301,7 @@ if __name__ == '__main__':
         else:
             return 0.0
 
-
-    gamma_init = 20
-    fa_init = 0.5
-    fb_init = 0.05
-    slot_gap_init = 0
-    delay_init = 0
-
-    delta_axis = range(0, 101)
+    delta_axis = range(0, gamma_max+1)
     r_axis = np.linspace(0.0, 1.0, 20)
 
     fig, ax = plt.subplots(1, 2)
@@ -235,7 +316,7 @@ if __name__ == '__main__':
     line1, = ax[1].plot(r_axis, r_init_data, 'b-', label='honest (r)')
     line2, = ax[1].plot(r_axis, a_init_data, 'r-', label='covert (1-r)')
     line3, = ax[1].plot([0.0, 1.0], [0.0, max(r_init_data)], 'g-', label='f_eff * r')
-    line4, = ax[1].plot(r_axis, a_init_data, 'r.', label='grind (1-r)')
+    line4, = ax[1].plot(r_axis, a_init_data, color='r', linestyle='dotted', label='grind (1-r)')
 
 
     def line_intersection(l1, l2):
@@ -247,7 +328,8 @@ if __name__ == '__main__':
 
         div = det(x_diff, y_diff)
         if div == 0:
-            raise Exception('lines do not intersect')
+            return 0.0, 0.0
+            # raise Exception('lines do not intersect')
 
         d = (det(*l1), det(*l2))
         x = det(d, x_diff) / div
@@ -257,6 +339,8 @@ if __name__ == '__main__':
 
     def find_intersection(curve1, curve2, x_axis):
         i = 0
+        if curve1[0] - curve2[0] == 0.0:
+            return x_axis[0], 0.0
         sign = (curve1[0] - curve2[0]) / abs(curve1[0] - curve2[0])
         for (c1, c2) in zip(curve1, curve2):
             if sign > 0.0 and c1 - c2 > 0.0 or sign < 0.0 and c1 - c2 < 0.0:
@@ -278,13 +362,13 @@ if __name__ == '__main__':
     fig.suptitle("Participation Bound = " + "{:.2f}".format(1.0 - inter_x))
 
     ax_gamma = plt.axes([0.15, 0.05, 0.65, 0.03])
-    s_gamma = Slider(ax_gamma, 'gamma', 0, 100, valinit=gamma_init, valfmt="%i")
+    s_gamma = Slider(ax_gamma, 'gamma', 0, gamma_max, valinit=gamma_init, valfmt="%i")
 
     ax_slot_gap = plt.axes([0.15, 0.1, 0.65, 0.03])
-    s_slot_gap = Slider(ax_slot_gap, 'slot gap', 0, 100, valinit=slot_gap_init, valfmt="%i")
+    s_slot_gap = Slider(ax_slot_gap, 'slot gap', 0, gamma_max, valinit=slot_gap_init, valfmt="%i")
 
     ax_delay = plt.axes([0.15, 0.15, 0.65, 0.03])
-    s_delay = Slider(ax_delay, 'delay', 0, 100, valinit=delay_init, valfmt="%i")
+    s_delay = Slider(ax_delay, 'delay', 0, gamma_max, valinit=delay_init, valfmt="%i")
 
     ax_fa = plt.axes([0.15, 0.2, 0.65, 0.03])
     s_fa = Slider(ax_fa, 'fA', 0.001, 0.99, valinit=fa_init)
@@ -296,14 +380,14 @@ if __name__ == '__main__':
     b_grind = Button(ax_grind_button, 'Calculate Grinding Advantage')
 
     ax[1].legend()
+    line4.set_linestyle("None")
 
     fig2 = plt.figure(2)
     ax2 = plt.axes(projection='3d')
     rax = plt.axes([0.05, 0.95, 0.9, 0.05])
-    radio = MyRadioButtons(rax, ['fa', 'fb', 'gamma', 'slot gap', 'delay'], active=0, activecolor='crimson',
+    radio = MyRadioButtons(rax, ['fa', 'fb', 'gamma', 'slot gap', 'delay'], active=4, activecolor='crimson',
                            orientation="horizontal")
-    gamma_max = 100
-    nx, ny = (15, 15)
+
     xx = np.linspace(0.0, 1.0, nx)
     yy = np.linspace(0.0, 1.0, ny)
     yyi = np.arange(0, gamma_max, gamma_max/ny)
@@ -323,8 +407,7 @@ if __name__ == '__main__':
 
     ax2.set_xlabel('r')
     ax2.set_zlabel('Block Frequency')
-    radio_var = 'fa'
-
+    radio_var = 'delay'
 
     def update_cont(label):
         global surf1, surf2, scatter, radio_var
@@ -521,6 +604,7 @@ if __name__ == '__main__':
         line2.set_ydata(new_data2)
         line3.set_ydata([0.0, max(new_data)])
         line4.set_ydata(new_data3)
+        line4.set_linestyle('dotted')
         (new_inter_x, new_inter_y) = find_intersection(new_data2, new_data, r_axis)
         dot.set_xdata(new_inter_x)
         dot.set_ydata(new_inter_y)
@@ -541,4 +625,18 @@ if __name__ == '__main__':
     b_grind.on_clicked(update_grind)
     radio.on_clicked(update_cont)
 
-    plt.show()
+    fig3 = plt.figure(3)
+    ax3 = plt.axes()
+    scale_factor = np.amax(zv2)
+    ax3.plot(pb3d[1, :]*scale_factor, 1.0-pb3d[0, :], label="PoS")
+    x_axis = np.linspace(0.001, np.amax(pb3d[1, :]*scale_factor), len(pb3d[1, :]))
+    y_data = 0.5 + (2.0 - np.sqrt(x_axis*x_axis + 4.0))/(2.0*x_axis)
+    ax3.plot(x_axis, y_data, label="PoW")
+    ax3.plot()
+
+    ax3.set(xlabel="Chain Growth * Delay (f_eff * Delta)")
+    ax3.set(ylabel="Consistency Bound")
+    ax3.legend()
+
+
+plt.show()
