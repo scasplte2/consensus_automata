@@ -3,22 +3,26 @@ import numpy as np
 from matplotlib.widgets import Slider
 from matplotlib.widgets import Button
 import multiprocessing as mp
-from mpl_toolkits import mplot3d
 from matplotlib.widgets import AxesWidget, RadioButtons
+from scipy import interpolate
 
 gamma_max = 100
-trunc_error = 1.0e-4
-max_iter = 3000
-total_slots = 100000
+trunc_error = 1.0e-6
+max_iter = 10000
+total_slots = 200000
 slots = np.arange(total_slots)
 ys = np.random.rand(total_slots)
 branch_depth = 2
 nx, ny = (10, 10)
+n_cons_plt = 100
 gamma_init = 0
 fa_init = 0.5
 fb_init = 0.05
 slot_gap_init = 0
 delay_init = 0
+
+use_pow_test = False
+numerical_method = "trunc"
 
 
 class MyRadioButtons(RadioButtons):
@@ -178,6 +182,13 @@ if __name__ == '__main__':
 
 
     def n_d_acc(d, r, gamma, slot_gap, fa, fb, delay, acc):
+        if use_pow_test:
+            return n_d_acc_pow(d, r, gamma, slot_gap, fa, fb, delay, acc)
+        else:
+            return n_d_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc)
+
+
+    def n_d_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc):
         def f(x):
             if x <= slot_gap or x <= delay:
                 return 0.0
@@ -194,7 +205,7 @@ if __name__ == '__main__':
 
     def n_d_acc_pow(d, r, gamma, slot_gap, fa, fb, delay, acc):
         def f(x, y):
-            if y <= delay:
+            if y < delay + 1:
                 return 0.0
             else:
                 return fb*x
@@ -204,6 +215,15 @@ if __name__ == '__main__':
             out2 = (1.0 - f(r, d)) * acc
             out1 = f(r, d) * out2
             return out1, out2
+
+    def block_frequency(r, gamma, slot_gap, fa, fb, delay):
+        if numerical_method == "trunc":
+            return block_frequency_trunc(r, gamma, slot_gap, fa, fb, delay)
+        if numerical_method == "pi":
+            return block_frequency_pi(r, gamma, slot_gap, fa, fb, delay)
+        if numerical_method == "tail":
+            return block_frequency_tail(r, gamma, slot_gap, fa, fb, delay)
+        return 0.0
 
     def block_frequency_pi(r, gamma, slot_gap, fa, fb, delay):
         if r > 0.0:
@@ -273,7 +293,7 @@ if __name__ == '__main__':
             return 0.0
 
 
-    def block_frequency(r, gamma, slot_gap, fa, fb, delay):
+    def block_frequency_trunc(r, gamma, slot_gap, fa, fb, delay):
         res = 0.0
         if r > 0.0:
             i = 0
@@ -283,6 +303,8 @@ if __name__ == '__main__':
             pdf = []
             while not done and i < max_iter:
                 i = i + 1
+                if i == max_iter:
+                    print("Warning: distribution did not converge")
                 (nd, accumulation) = n_d_acc(i, r, gamma, slot_gap, fa, fb, delay, accumulation)
                 # new = i * nd
                 pdf.append(nd)
@@ -291,6 +313,8 @@ if __name__ == '__main__':
                     done = True
                 old_value = new
             i = 0
+            norm = sum(pdf)
+            pdf = np.asarray(pdf)/norm
             for nd in pdf:
                 i = i + 1
                 res = res + i * nd
@@ -328,8 +352,7 @@ if __name__ == '__main__':
 
         div = det(x_diff, y_diff)
         if div == 0:
-            return 0.0, 0.0
-            # raise Exception('lines do not intersect')
+            raise ZeroDivisionError
 
         d = (det(*l1), det(*l2))
         x = det(d, x_diff) / div
@@ -350,7 +373,9 @@ if __name__ == '__main__':
                     return line_intersection(([x_axis[i], curve1[i]], [x_axis[i + 1], curve1[i + 1]]),
                                              ([x_axis[i], curve2[i]], [x_axis[i + 1], curve2[i + 1]]))
                 else:
-                    return x_axis[len(x_axis)-1], 0.0
+                    # return x_axis[len(x_axis)-1], 0.0
+                    return line_intersection(([x_axis[i-1], curve1[i-1]], [x_axis[i], curve1[i]]),
+                                     ([x_axis[i-1], curve2[i-1]], [x_axis[i], curve2[i]]))
 
 
     (inter_x, inter_y) = find_intersection(a_init_data, r_init_data, r_axis)
@@ -359,7 +384,7 @@ if __name__ == '__main__':
 
     ax[1].set(xlabel="Active Stake (r)")
     ax[1].set(ylabel="Block Frequency (1/slot)")
-    fig.suptitle("Participation Bound = " + "{:.2f}".format(1.0 - inter_x))
+    fig.suptitle("Consistency Bound = " + "{:.2f}".format(1.0 - inter_x))
 
     ax_gamma = plt.axes([0.15, 0.05, 0.65, 0.03])
     s_gamma = Slider(ax_gamma, 'gamma', 0, gamma_max, valinit=gamma_init, valfmt="%i")
@@ -408,6 +433,98 @@ if __name__ == '__main__':
     ax2.set_xlabel('r')
     ax2.set_zlabel('Block Frequency')
     radio_var = 'delay'
+
+    def pow_bound(x):
+        if x > 0.0:
+            return 0.5 + (2.0 - np.sqrt(x * x + 4.0)) / (2.0 * x)
+        else:
+            return 0.5
+
+    v_pow_bound = np.vectorize(pow_bound)
+
+    fig3, ax3 = plt.subplots()
+    f_effective = np.amax(zv2)
+    curve_consistency, = ax3.plot(pb3d[1, :] * f_effective, 1.0 - pb3d[0, :], label="PoS", color='g')
+    block_per_delay = np.linspace(0.0, np.amax(pb3d[1, :] * f_effective), len(pb3d[1, :]))
+    pow_consistency_bound = v_pow_bound(block_per_delay)
+    curve_pow, = ax3.plot(block_per_delay, pow_consistency_bound, label="PoW", color='b', linestyle=':')
+
+    ax3.set(xlabel="Blocks per Delay Interval $(f_{effective} * \Delta)$")
+    ax3.set(ylabel="Consistency Bound")
+    ax3.legend()
+
+
+    def update_consistency(adv_data=np.asarray([])):
+        global curve_consistency, curve_pow, block_per_delay, pow_consistency_bound, f_effective
+        curve_pow.remove()
+        curve_consistency.remove()
+        scale_factor = 1
+        f_effective = np.amax(zv2)
+        block_per_delay = np.linspace(0.0, np.amax(pb3d[1, :]) * f_effective * scale_factor, n_cons_plt)
+        pow_consistency_bound = v_pow_bound(block_per_delay)
+        consistency_bound = v_pow_bound(block_per_delay)
+        window = 0.01
+        w0 = 0.005
+        c0 = 0.5
+        if len(adv_data) == 0:
+            for d in np.array(range(0, scale_factor*n_cons_plt, scale_factor)):
+                i = 0
+                while i < max_iter:
+                    try:
+                        x1 = c0-window
+                        x2 = c0+window
+                        z11 = block_frequency(x1, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, d)
+                        z12 = block_frequency(x2, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, d)
+                        z21 = block_frequency(1.0-x1, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, 0)
+                        z22 = block_frequency(1.0-x2, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, 0)
+                        (xi, zi) = line_intersection(([x1, z11], [x2, z12]), ([x1, z21], [x2, z22]))
+                        consistency_bound[d//scale_factor] = 1.0 - xi
+                        c0 = xi
+                        i = max_iter
+                    except ZeroDivisionError:
+                        window = window + w0
+                        i = i + 1
+                        print("increasing window")
+        else:
+            interp = interpolate.interp1d(r_axis, adv_data, kind="cubic")
+            c0, z0 = find_intersection(zv[0, :], interp(xv[0, :]), xv[0, :])
+            for d in np.array(range(0, scale_factor*n_cons_plt, scale_factor)):
+                i = 0
+                while i < max_iter:
+                    try:
+                        x1 = c0-window
+                        x2 = c0+window
+                        z11 = block_frequency(x1, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, d)
+                        z12 = block_frequency(x2, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, d)
+                        z21 = interp(x1)
+                        z22 = interp(x2)
+                        (xi, zi) = line_intersection(([x1, z11], [x2, z12]), ([x1, z21], [x2, z22]))
+                        consistency_bound[d//scale_factor] = 1.0 - xi
+                        c0 = xi
+                        i = max_iter
+                    except ZeroDivisionError:
+                        window = window + w0
+                        i = i + 1
+                        print("increasing window")
+
+        curve_consistency, = ax3.plot(block_per_delay, consistency_bound, label="PoS", color='g')
+        curve_pow, = ax3.plot(block_per_delay, pow_consistency_bound, label="PoW", color='b', linestyle=':')
+        ax3.relim()
+        ax3.autoscale_view()
+
+
+    def update_consistency_old():
+        global curve_consistency, curve_pow, block_per_delay, pow_consistency_bound, f_effective
+        curve_pow.remove()
+        curve_consistency.remove()
+        f_effective = np.amax(zv2)
+        curve_consistency, = ax3.plot(pb3d[1, :] * f_effective, 1.0 - pb3d[0, :], label="PoS", color='g')
+        block_per_delay = np.linspace(0.0, np.amax(pb3d[1, :] * f_effective), len(pb3d[1, :]))
+        pow_consistency_bound = v_pow_bound(block_per_delay)
+        curve_pow, = ax3.plot(block_per_delay, pow_consistency_bound, label="PoW", color='b', linestyle=':')
+        ax3.relim()
+        ax3.autoscale_view()
+
 
     def update_cont(label):
         global surf1, surf2, scatter, radio_var
@@ -485,6 +602,7 @@ if __name__ == '__main__':
         ax2.relim()
         ax2.autoscale_view(tight=True)
         ax2.set_zlim3d(0.0, min(1.0, max(np.amax(zv), np.amax(zv2))))
+        update_consistency()
         plt.show(block=False)
 
 
@@ -507,7 +625,7 @@ if __name__ == '__main__':
         ax[1].relim()
         ax[1].autoscale_view()
         update_cont(radio_var)
-        fig.suptitle("Participation Bound = " + "{:.2f}".format(1.0 - new_inter_x))
+        fig.suptitle("Consistency Bound = " + "{:.2f}".format(1.0 - new_inter_x))
 
 
     def update_slot_gap(new_slot_gap):
@@ -529,7 +647,7 @@ if __name__ == '__main__':
         ax[1].relim()
         ax[1].autoscale_view()
         update_cont(radio_var)
-        fig.suptitle("Participation Bound = " + "{:.2f}".format(1.0 - new_inter_x))
+        fig.suptitle("Consistency Bound = " + "{:.2f}".format(1.0 - new_inter_x))
 
 
     def update_fa(new_fa):
@@ -549,7 +667,7 @@ if __name__ == '__main__':
         ax[1].relim()
         ax[1].autoscale_view()
         update_cont(radio_var)
-        fig.suptitle("Participation Bound = " + "{:.2f}".format(1.0 - new_inter_x))
+        fig.suptitle("Consistency Bound = " + "{:.2f}".format(1.0 - new_inter_x))
 
 
     def update_fb(new_fb):
@@ -569,7 +687,7 @@ if __name__ == '__main__':
         ax[1].relim()
         ax[1].autoscale_view()
         update_cont(radio_var)
-        fig.suptitle("Participation Bound = " + "{:.2f}".format(1.0 - new_inter_x))
+        fig.suptitle("Consistency Bound = " + "{:.2f}".format(1.0 - new_inter_x))
 
 
     def update_delay(new_delay):
@@ -591,7 +709,7 @@ if __name__ == '__main__':
         ax[1].relim()
         ax[1].autoscale_view()
         update_cont(radio_var)
-        fig.suptitle("Participation Bound = " + "{:.2f}".format(1.0 - new_inter_x))
+        fig.suptitle("Consistency Bound = " + "{:.2f}".format(1.0 - new_inter_x))
 
 
     def update_grind(val):
@@ -605,7 +723,7 @@ if __name__ == '__main__':
         line3.set_ydata([0.0, max(new_data)])
         line4.set_ydata(new_data3)
         line4.set_linestyle('dotted')
-        (new_inter_x, new_inter_y) = find_intersection(new_data2, new_data, r_axis)
+        (new_inter_x, new_inter_y) = find_intersection(new_data3, new_data, r_axis)
         dot.set_xdata(new_inter_x)
         dot.set_ydata(new_inter_y)
         ax[0].relim()
@@ -613,7 +731,8 @@ if __name__ == '__main__':
         ax[1].relim()
         ax[1].autoscale_view()
         update_cont(radio_var)
-        fig.suptitle("Participation Bound = " + "{:.2f}".format(1.0 - new_inter_x))
+        update_consistency(np.asarray(new_data3))
+        fig.suptitle("Consistency Bound = " + "{:.2f}".format(1.0 - new_inter_x))
 
 
     update_cont(radio_var)
@@ -624,19 +743,5 @@ if __name__ == '__main__':
     s_delay.on_changed(update_delay)
     b_grind.on_clicked(update_grind)
     radio.on_clicked(update_cont)
-
-    fig3 = plt.figure(3)
-    ax3 = plt.axes()
-    scale_factor = np.amax(zv2)
-    ax3.plot(pb3d[1, :]*scale_factor, 1.0-pb3d[0, :], label="PoS")
-    x_axis = np.linspace(0.001, np.amax(pb3d[1, :]*scale_factor), len(pb3d[1, :]))
-    y_data = 0.5 + (2.0 - np.sqrt(x_axis*x_axis + 4.0))/(2.0*x_axis)
-    ax3.plot(x_axis, y_data, label="PoW")
-    ax3.plot()
-
-    ax3.set(xlabel="Chain Growth * Delay (f_eff * Delta)")
-    ax3.set(ylabel="Consistency Bound")
-    ax3.legend()
-
 
 plt.show()
