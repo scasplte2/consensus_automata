@@ -5,24 +5,67 @@ from matplotlib.widgets import Button
 import multiprocessing as mp
 from matplotlib.widgets import AxesWidget, RadioButtons
 from scipy import interpolate
+from scipy import signal
 
+# Maximum value of gamma to be plotted
 gamma_max = 100
+# Truncation error in distribution summation as slot-interval diverges
 trunc_error = 1.0e-6
+#  Max number of iterations for convergent series
 max_iter = 10000
+# Number of nonces that the grinding simulation runs over
 total_slots = 200000
+# Slot axis for grinding simulation
 slots = np.arange(total_slots)
+# Nonces for grinding simulation
 ys = np.random.rand(total_slots)
+# Number of generations to keep in branch reserve below the maximum generation (max block number)
 branch_depth = 2
+# Grid resolution for 3d surface plot
 nx, ny = (10, 10)
+# Number of data points for consistency contour
 n_cons_plt = 100
+# Target chain growth for heatmap series over varying gamma and fa
+target_f_eff = 0.15
+
+# Initial Snowplow curve params
 gamma_init = 0
 fa_init = 0.5
-fb_init = 0.05
+fb_init = 0.03
 slot_gap_init = 0
+
+# Initial delay value \Delta in semi-synchronous delay model
 delay_init = 0
 
+# Will use Proof-of-Work model instead if true
 use_pow_test = False
+# Use grinding simulation in heatmap calculation
+heatmap_grind = False
+# Numerical method used in probability density function calculation
 numerical_method = "trunc"
+# Use a specified difficulty curve from txt
+user_defined_curve = False
+
+# Domain of slot intervals in all calculations
+delta_axis = np.arange(0, gamma_max + 1)
+# Domain of normalized resources r = (r_h/(r_a+r_h) = 1.0 - r_a/(r_a+r_h)
+r_axis = np.linspace(0.0, 1.0, 20)
+
+# User defined curve TODO add txt file input
+difficulty_curve = (signal.sawtooth(2 * np.pi * 0.05 * delta_axis) + 1.0) / 2.0
+
+
+# Proof-of-Work consistency bound, approximation of consistency bound derived from
+# https://doi.org/10.1145/3372297.3423365
+# Serves as baseline of comparison for numerical techniques as well as Proof-of-Stake vs Proof-of-Work
+def pow_bound(x):
+    if x > 0.0:
+        return 0.5 + (2.0 - np.sqrt(x * x + 4.0)) / (2.0 * x)
+    else:
+        return 0.5
+
+
+v_pow_bound = np.vectorize(pow_bound)
 
 
 class MyRadioButtons(RadioButtons):
@@ -63,7 +106,7 @@ class MyRadioButtons(RadioButtons):
                 facecolor = activecolor
             else:
                 facecolor = axcolor
-            p = ax.scatter([],[], s=size, marker="o", edgecolor='black',
+            p = ax.scatter([], [], s=size, marker="o", edgecolor='black',
                            facecolor=facecolor)
             circles.append(p)
         if orientation == "horizontal":
@@ -87,47 +130,58 @@ class MyRadioButtons(RadioButtons):
             self.set_active(self.circles.index(event.artist))
 
 
+# Difficulty curve
+def f(delta, gamma, slot_gap, fa, fb):
+    if delta <= slot_gap:
+        return 0.0
+    elif delta <= gamma:
+        if user_defined_curve:
+            return fa * difficulty_curve[delta]
+        else:
+            # default snowplow curve
+            return fa * (float(delta - slot_gap)) / float(gamma - slot_gap)
+    else:
+        return fb
+
+
+# Grinding simulation at module level for multiprocessing
 def grinding_frequency(arg):
     (bd, r, gamma, slot_gap, fa, fb) = arg
     if r == 0.0:
         return 0.0
 
-    # Snowplow curve
-    def f(x):
-        if x < slot_gap + 1:
-            return 0.0
-        elif x < gamma + 1:
-            return fa * (float(x - slot_gap)) / float(gamma - slot_gap)
-        else:
-            return fb
-
     phi_cache = {}
 
-    # Staking threshold
+    # Staking threshold precomputed
     def phi(d):
         if d in phi_cache:
             return phi_cache[d]
         else:
-            phi_cache[d] = 1.0 - (1.0 - f(d)) ** r
+            phi_cache[d] = 1.0 - (1.0 - f(d, gamma, slot_gap, fa, fb)) ** r
             return phi_cache[d]
 
     branches = np.zeros((1, 2), dtype=int)
     i = 0
 
+    # Maximally extend set of iid nonces with heuristic branching random walk
+    # Each generation produces children with increasing block number
     for y in ys:
-        new_parents = []
+        # Accumulate new branches
+        new_branches = []
         for branch in branches:
+            # If this branch satisfies vrf test for nonce y new child branches are created at the next height
             if y < phi(slots[i] - branch[0]):
-                new_parents.append([branch[0], branch[1]])
-                branch[0] = slots[i]
-                branch[1] = branch[1] + 1
-        for entry in new_parents:
+                new_branches.append([slots[i], branch[1] + 1])
+        for entry in new_branches:
             branches = np.vstack([branches, entry])
+        # Remove duplicate branches
         branches = np.unique(branches, axis=0)
+        # Among all parent slots, keep the highest generation branch and discard the rest
         slot_set = set()
         for branch in branches:
             slot_set.add(branch[0])
         branch_max = {x: -1 for x in slot_set}
+        # Find the maximum generation
         max_block_num = 0
         for slot in slot_set:
             for entry in branches:
@@ -135,6 +189,7 @@ def grinding_frequency(arg):
                     if entry[1] > branch_max[slot]:
                         branch_max[slot] = entry[1]
                         max_block_num = max(max_block_num, branch_max[slot])
+        # Remove all branches below the maximum generation minus the branch depth
         branches = np.array(list(filter(lambda x: max_block_num - x[1] < bd, list(branch_max.items()))))
         i = i + 1
     max_l = 0
@@ -143,6 +198,7 @@ def grinding_frequency(arg):
     return max_l / total_slots
 
 
+# Parallelized grinding simulation
 def mp_grinding_frequency(r_range, gamma, slot_gap, fa, fb):
     pool = mp.Pool(mp.cpu_count())
     output = pool.map(grinding_frequency, [(branch_depth, 1.0 - arg, gamma, slot_gap, fa, fb) for arg in r_range])
@@ -151,197 +207,6 @@ def mp_grinding_frequency(r_range, gamma, slot_gap, fa, fb):
 
 
 if __name__ == '__main__':
-
-    def n_d(d, r, gamma, slot_gap, fa, fb, delay):
-        def f(x):
-            if x < slot_gap + 1:
-                return 0.0
-            elif x < gamma + 1:
-                return fa * (float(x - slot_gap)) / float(gamma - slot_gap)
-            else:
-                return fb
-
-        def prod(arguments):
-            result = 1.0
-            for k in arguments:
-                result = result * k
-            return result
-
-        def p_empty_slot(j):
-            return [np.power(1.0 - f(k), r) for k in range(1, j + 1)]
-
-        def prod_p_empty_slot(j):
-            return prod(p_empty_slot(j))
-
-        if d < 1 or d < delay + 1:
-            return 0.0
-        elif d == 1:
-            return 1.0 - np.power(1.0 - f(d), r)
-        else:
-            return (1.0 - np.power(1.0 - f(d), r)) * prod_p_empty_slot(d - 1)
-
-
-    def n_d_acc(d, r, gamma, slot_gap, fa, fb, delay, acc):
-        if use_pow_test:
-            return n_d_acc_pow(d, r, gamma, slot_gap, fa, fb, delay, acc)
-        else:
-            return n_d_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc)
-
-
-    def n_d_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc):
-        def f(x):
-            if x <= slot_gap or x <= delay:
-                return 0.0
-            elif x <= gamma:
-                return fa * (float(x - slot_gap)) / float(gamma - slot_gap)
-            else:
-                return fb
-        if d == 1:
-            return 1.0 - np.power(max(1.0 - f(d), 0.0), r), 1.0
-        else:
-            out2 = np.power(max(1.0 - f(d-1), 0.0), r) * acc
-            out1 = (1.0 - np.power(max(1.0 - f(d), 0.0), r)) * out2
-            return out1, out2
-
-    def n_d_acc_pow(d, r, gamma, slot_gap, fa, fb, delay, acc):
-        def f(x, y):
-            if y < delay + 1:
-                return 0.0
-            else:
-                return fb*x
-        if d == 1:
-            return f(r, d), 1.0
-        else:
-            out2 = (1.0 - f(r, d)) * acc
-            out1 = f(r, d) * out2
-            return out1, out2
-
-    def block_frequency(r, gamma, slot_gap, fa, fb, delay):
-        if numerical_method == "trunc":
-            return block_frequency_trunc(r, gamma, slot_gap, fa, fb, delay)
-        if numerical_method == "pi":
-            return block_frequency_pi(r, gamma, slot_gap, fa, fb, delay)
-        if numerical_method == "tail":
-            return block_frequency_tail(r, gamma, slot_gap, fa, fb, delay)
-        return 0.0
-
-    def block_frequency_pi(r, gamma, slot_gap, fa, fb, delay):
-        if r > 0.0:
-            def f(x):
-                if x < slot_gap + 1 or x < delay + 1:
-                    return 0.0
-                elif x < gamma + 1:
-                    return fa * (float(x - slot_gap)) / float(gamma - slot_gap)
-                else:
-                    return fb
-            ns = max(gamma, slot_gap, delay) + 1
-            pi = np.empty([ns])
-            pbar = np.empty([ns])
-            prev = 1.0
-            for i in range(ns):
-                new = np.power(1.0 - f(i+1), r) * prev
-                pbar[i] = new
-                prev = new
-
-            c1 = 1.0 + sum(pbar[:ns-3]) + pbar[ns-2]/(1.0 - np.power(1.0 - f(gamma+1), r))
-            cgp1 = (1.0 - np.power(1.0 - f(gamma+1), r)) * (1.0 + sum(pbar[:ns-2])) + pbar[ns-1]
-            for i in range(ns):
-                if i == gamma:
-                    pi[i] = pbar[i]/cgp1
-                else:
-                    pi[i] = pbar[i]/c1
-            print(c1, cgp1)
-            print(pi, r, gamma, slot_gap, fa, fb, delay)
-            if not 0.98 < sum(pi) < 1.02:
-                print(sum(pi))
-                quit()
-            res = 0.0
-            for i in range(ns):
-                if i == ns-1:
-                    res = res  # + pi[i] * (gamma + 1.0 + 1.0/(r*np.log(1-fb)))
-                else:
-                    res = res + (1.0 - np.power(max(1.0 - f(i+1), 0.0), r)) * pi[i] * (i + 1)
-            return 1.0 / res
-        else:
-            return 0.0
-
-
-    def block_frequency_tail(r, gamma, slot_gap, fa, fb, delay):
-        if r > 0.0:
-            block_time = 0.0
-            accumulation = 0.0
-            ns = int(max(gamma, slot_gap, delay) + 1)
-            pdf = np.empty([ns])
-            for i in range(ns):
-                (nd, accumulation) = n_d_acc(i+1, r, gamma, slot_gap, fa, fb, delay, accumulation)
-                pdf[i] = nd
-            norm = sum(pdf)
-            pdf = pdf/norm
-            i = 0
-            for nd in pdf:
-                i = i + 1
-                if i == ns:
-                    block_time = block_time + (ns + 1.0/(r*np.log(1.0/(1.0 - fb))))
-                else:
-                    block_time = block_time + i * nd
-
-            if block_time > 0.0:
-                return 1.0 / block_time
-            else:
-                return 0.0
-        else:
-            return 0.0
-
-
-    def block_frequency_trunc(r, gamma, slot_gap, fa, fb, delay):
-        res = 0.0
-        if r > 0.0:
-            i = 0
-            done = False
-            old_value = 0.0
-            accumulation = 0.0
-            pdf = []
-            while not done and i < max_iter:
-                i = i + 1
-                if i == max_iter:
-                    print("Warning: distribution did not converge")
-                (nd, accumulation) = n_d_acc(i, r, gamma, slot_gap, fa, fb, delay, accumulation)
-                # new = i * nd
-                pdf.append(nd)
-                new = nd
-                if trunc_error > new > 0.0 and old_value > 0.0:
-                    done = True
-                old_value = new
-            i = 0
-            norm = sum(pdf)
-            pdf = np.asarray(pdf)/norm
-            for nd in pdf:
-                i = i + 1
-                res = res + i * nd
-            if res > 0.0:
-                return 1.0 / res
-            else:
-                return 0.0
-        else:
-            return 0.0
-
-    delta_axis = range(0, gamma_max+1)
-    r_axis = np.linspace(0.0, 1.0, 20)
-
-    fig, ax = plt.subplots(1, 2)
-    plt.subplots_adjust(left=0.15, bottom=0.4)
-    init_density = [n_d(d, 1.0, gamma_init, slot_gap_init, fa_init, fb_init, delay_init) for d in delta_axis]
-    line0, = ax[0].plot(delta_axis, init_density)
-    ax[0].set(xlabel="Slot Interval")
-    ax[0].set(ylabel="Probability Density")
-
-    r_init_data = [block_frequency(r, gamma_init, slot_gap_init, fa_init, fb_init, delay_init) for r in r_axis]
-    a_init_data = [block_frequency(1.0 - r, gamma_init, slot_gap_init, fa_init, fb_init, 0) for r in r_axis]
-    line1, = ax[1].plot(r_axis, r_init_data, 'b-', label='honest (r)')
-    line2, = ax[1].plot(r_axis, a_init_data, 'r-', label='covert (1-r)')
-    line3, = ax[1].plot([0.0, 1.0], [0.0, max(r_init_data)], 'g-', label='f_eff * r')
-    line4, = ax[1].plot(r_axis, a_init_data, color='r', linestyle='dotted', label='grind (1-r)')
-
 
     def line_intersection(l1, l2):
         x_diff = (l1[0][0] - l1[1][0], l2[0][0] - l2[1][0])
@@ -369,14 +234,189 @@ if __name__ == '__main__':
             if sign > 0.0 and c1 - c2 > 0.0 or sign < 0.0 and c1 - c2 < 0.0:
                 i = i + 1
             else:
-                if i+1 < len(x_axis):
+                if i + 1 < len(x_axis):
                     return line_intersection(([x_axis[i], curve1[i]], [x_axis[i + 1], curve1[i + 1]]),
                                              ([x_axis[i], curve2[i]], [x_axis[i + 1], curve2[i + 1]]))
                 else:
                     # return x_axis[len(x_axis)-1], 0.0
-                    return line_intersection(([x_axis[i-1], curve1[i-1]], [x_axis[i], curve1[i]]),
-                                     ([x_axis[i-1], curve2[i-1]], [x_axis[i], curve2[i]]))
+                    return line_intersection(([x_axis[i - 1], curve1[i - 1]], [x_axis[i], curve1[i]]),
+                                             ([x_axis[i - 1], curve2[i - 1]], [x_axis[i], curve2[i]]))
 
+
+    # Numerical routines for calculation of the Probability Density Function (PDF)
+
+
+    def pdf_acc(d, r, gamma, slot_gap, fa, fb, delay, acc):
+        if use_pow_test:
+            return pdf_acc_pow(d, r, fb, delay, acc)
+        else:
+            return pdf_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc)
+
+
+    def pdf(d_axis, r, gamma, slot_gap, fa, fb, delay):
+        out = np.empty(len(d_axis))
+        acc = 0.0
+        for (i, d) in zip(range(len(d_axis)), d_axis):
+            (nd, acc) = pdf_acc(d, r, gamma, slot_gap, fa, fb, delay, acc)
+            out[i] = nd
+        norm = sum(out)
+        return out / norm
+
+
+    def pdf_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc):
+        if d == 1:
+            if d > delay:
+                return 1.0 - np.power(max(1.0 - f(d, gamma, slot_gap, fa, fb), 0.0), r), 1.0
+            else:
+                return 0.0, 1.0
+        else:
+            if d > delay:
+                out2 = np.power(max(1.0 - f(d - 1, gamma, slot_gap, fa, fb), 0.0), r) * acc
+                out1 = (1.0 - np.power(max(1.0 - f(d, gamma, slot_gap, fa, fb), 0.0), r)) * out2
+                return out1, out2
+            else:
+                return 0.0, acc
+
+
+    def pdf_acc_pow(d, r, fb, delay, acc):
+        if d == 1:
+            if d > delay:
+                return fb * r, 1.0
+            else:
+                return 0.0, 1.0
+        else:
+            if d > delay:
+                out2 = (1.0 - fb * r) * acc
+                out1 = fb * r * out2
+                return out1, out2
+            else:
+                return 0.0, acc
+
+
+    # Block frequency functions
+
+
+    def block_frequency(r, gamma, slot_gap, fa, fb, delay):
+        if numerical_method == "trunc":
+            return block_frequency_trunc(r, gamma, slot_gap, fa, fb, delay)
+        if numerical_method == "pi":
+            return block_frequency_pi(r, gamma, slot_gap, fa, fb, delay)
+        if numerical_method == "tail":
+            return block_frequency_tail(r, gamma, slot_gap, fa, fb, delay)
+        return 0.0
+
+
+    def block_frequency_pi(r, gamma, slot_gap, fa, fb, delay):
+        if r > 0.0:
+            ns = max(gamma, slot_gap, delay) + 1
+            pi = np.empty([ns])
+            pbar = np.empty([ns])
+            prev = 1.0
+            for i in range(ns):
+                new = np.power(1.0 - f(i + 1, gamma, slot_gap, fa, fb), r) * prev
+                pbar[i] = new
+                prev = new
+
+            c1 = 1.0 + sum(pbar[:ns - 3]) + pbar[ns - 2] / (
+                    1.0 - np.power(1.0 - f(gamma + 1, gamma, slot_gap, fa, fb), r))
+            cgp1 = (1.0 - np.power(1.0 - f(gamma + 1, gamma, slot_gap, fa, fb), r)) * (1.0 + sum(pbar[:ns - 2])) + pbar[
+                ns - 1]
+            for i in range(ns):
+                if i == gamma:
+                    pi[i] = pbar[i] / cgp1
+                else:
+                    pi[i] = pbar[i] / c1
+            print(c1, cgp1)
+            print(pi, r, gamma, slot_gap, fa, fb, delay)
+            if not 0.98 < sum(pi) < 1.02:
+                print(sum(pi))
+                quit()
+            res = 0.0
+            for i in range(ns):
+                if i == ns - 1:
+                    res = res  # + pi[i] * (gamma + 1.0 + 1.0/(r*np.log(1-fb)))
+                else:
+                    res = res + (1.0 - np.power(max(1.0 - f(i + 1, gamma, slot_gap, fa, fb), 0.0), r)) * pi[i] * (i + 1)
+            return 1.0 / res
+        else:
+            return 0.0
+
+
+    def block_frequency_tail(r, gamma, slot_gap, fa, fb, delay):
+        if r > 0.0:
+            block_time = 0.0
+            accumulation = 0.0
+            ns = int(max(gamma, slot_gap, delay) + 1)
+            pdf_a = np.empty([ns])
+            for i in range(ns):
+                (nd, accumulation) = pdf_acc(i + 1, r, gamma, slot_gap, fa, fb, delay, accumulation)
+                pdf_a[i] = nd
+            norm = sum(pdf_a)
+            pdf_a = pdf_a / norm
+            i = 0
+            for nd in pdf_a:
+                i = i + 1
+                if i == ns:
+                    block_time = block_time + (ns + 1.0 / (r * np.log(1.0 / (1.0 - fb))))
+                else:
+                    block_time = block_time + i * nd
+
+            if block_time > 0.0:
+                return 1.0 / block_time
+            else:
+                return 0.0
+        else:
+            return 0.0
+
+
+    def block_frequency_trunc(r, gamma, slot_gap, fa, fb, delay):
+        res = 0.0
+        if r > 0.0:
+            i = 0
+            done = False
+            old_value = 0.0
+            accumulation = 0.0
+            pdf_a = []
+            while not done and i < max_iter:
+                i = i + 1
+                if i == max_iter:
+                    print("Warning: distribution did not converge")
+                (nd, accumulation) = pdf_acc(i, r, gamma, slot_gap, fa, fb, delay, accumulation)
+                # new = i * nd
+                pdf_a.append(nd)
+                new = nd
+                if trunc_error > new > 0.0 and old_value > 0.0:
+                    done = True
+                old_value = new
+            i = 0
+            norm = sum(pdf_a)
+            pdf_a = np.asarray(pdf_a) / norm
+            for nd in pdf_a:
+                i = i + 1
+                res = res + i * nd
+            if res > 0.0:
+                return 1.0 / res
+            else:
+                return 0.0
+        else:
+            return 0.0
+
+
+    # Plots
+
+    fig, ax = plt.subplots(1, 2)
+    plt.subplots_adjust(left=0.15, bottom=0.45)
+    init_density = pdf(delta_axis, 1.0, gamma_init, slot_gap_init, fa_init, fb_init, delay_init)
+    line0, = ax[0].plot(delta_axis, init_density)
+    ax[0].set(xlabel="Slot Interval")
+    ax[0].set(ylabel="Probability Density")
+
+    r_init_data = [block_frequency(r, gamma_init, slot_gap_init, fa_init, fb_init, delay_init) for r in r_axis]
+    a_init_data = [block_frequency(1.0 - r, gamma_init, slot_gap_init, fa_init, fb_init, 0) for r in r_axis]
+    line1, = ax[1].plot(r_axis, r_init_data, 'b-', label='honest (r)')
+    line2, = ax[1].plot(r_axis, a_init_data, 'r-', label='covert (1-r)')
+    line3, = ax[1].plot([0.0, 1.0], [0.0, max(r_init_data)], 'g-', label='f_eff * r')
+    line4, = ax[1].plot(r_axis, a_init_data, color='r', linestyle='dotted', label='grind (1-r)')
 
     (inter_x, inter_y) = find_intersection(a_init_data, r_init_data, r_axis)
 
@@ -386,23 +426,31 @@ if __name__ == '__main__':
     ax[1].set(ylabel="Block Frequency (1/slot)")
     fig.suptitle("Consistency Bound = " + "{:.2f}".format(1.0 - inter_x))
 
-    ax_gamma = plt.axes([0.15, 0.05, 0.65, 0.03])
+    lim_1 = 0.15
+    lim_2 = np.linspace(0.01, 0.31, 7)
+    lim_3 = 0.65
+    lim_4 = 0.035
+
+    ax_gamma = plt.axes([lim_1, lim_2[0], lim_3, lim_4])
     s_gamma = Slider(ax_gamma, 'gamma', 0, gamma_max, valinit=gamma_init, valfmt="%i")
 
-    ax_slot_gap = plt.axes([0.15, 0.1, 0.65, 0.03])
+    ax_slot_gap = plt.axes([lim_1, lim_2[1], lim_3, lim_4])
     s_slot_gap = Slider(ax_slot_gap, 'slot gap', 0, gamma_max, valinit=slot_gap_init, valfmt="%i")
 
-    ax_delay = plt.axes([0.15, 0.15, 0.65, 0.03])
+    ax_delay = plt.axes([lim_1, lim_2[2], lim_3, lim_4])
     s_delay = Slider(ax_delay, 'delay', 0, gamma_max, valinit=delay_init, valfmt="%i")
 
-    ax_fa = plt.axes([0.15, 0.2, 0.65, 0.03])
+    ax_fa = plt.axes([lim_1, lim_2[3], lim_3, lim_4])
     s_fa = Slider(ax_fa, 'fA', 0.001, 0.99, valinit=fa_init)
 
-    ax_fb = plt.axes([0.15, 0.25, 0.65, 0.03])
+    ax_fb = plt.axes([lim_1, lim_2[4], lim_3, lim_4])
     s_fb = Slider(ax_fb, 'fB', 0.001, 0.99, valinit=fb_init)
 
-    ax_grind_button = plt.axes([0.15, 0.01, 0.65, 0.03])
-    b_grind = Button(ax_grind_button, 'Calculate Grinding Advantage')
+    ax_grind_button = plt.axes([lim_1, lim_2[5], lim_3, lim_4])
+    b_grind = Button(ax_grind_button, 'Calculate Grinding Frequency')
+
+    ax_consistency_plotter = plt.axes([lim_1, lim_2[6], lim_3, lim_4])
+    b_plot_consist = Button(ax_consistency_plotter, 'Plot Consistency Heatmap')
 
     ax[1].legend()
     line4.set_linestyle("None")
@@ -415,7 +463,7 @@ if __name__ == '__main__':
 
     xx = np.linspace(0.0, 1.0, nx)
     yy = np.linspace(0.0, 1.0, ny)
-    yyi = np.arange(0, gamma_max, gamma_max/ny)
+    yyi = np.arange(0, gamma_max, gamma_max / ny)
 
     zv = np.empty([nx, ny])
     zv2 = np.empty([nx, ny])
@@ -434,14 +482,6 @@ if __name__ == '__main__':
     ax2.set_zlabel('Block Frequency')
     radio_var = 'delay'
 
-    def pow_bound(x):
-        if x > 0.0:
-            return 0.5 + (2.0 - np.sqrt(x * x + 4.0)) / (2.0 * x)
-        else:
-            return 0.5
-
-    v_pow_bound = np.vectorize(pow_bound)
-
     fig3, ax3 = plt.subplots()
     f_effective = np.amax(zv2)
     curve_consistency, = ax3.plot(pb3d[1, :] * f_effective, 1.0 - pb3d[0, :], label="PoS", color='g')
@@ -454,31 +494,79 @@ if __name__ == '__main__':
     ax3.legend()
 
 
-    def update_consistency(adv_data=np.asarray([])):
+    def plot_consistency_heatmap(val):
+        gamma_axis = np.arange(1, gamma_max + 1)
+        num_delta = 100
+        y, x = np.meshgrid(gamma_axis, np.linspace(0.0, 100 * target_f_eff, num_delta))
+        z = v_pow_bound(x)
+        z = z[:-1, :-1]
+        fa = 0.0
+        f_eff = 0.0
+        f_eff_jm1 = 0.0
+        for i in range(gamma_max - 1):
+            fa_axis = np.linspace(0.0, 1.0, 100)
+            for (j, val) in zip(range(len(fa_axis)), fa_axis):
+                f_eff_j = block_frequency(1.0, gamma_axis[i], s_slot_gap.val, val, s_fb.val, 0)
+                if f_eff_j > target_f_eff:
+                    x1 = fa_axis[j]
+                    x2 = fa_axis[j - 1]
+                    z11 = f_eff_j
+                    z12 = f_eff_jm1
+                    z21 = target_f_eff
+                    z22 = target_f_eff
+                    (fa, f_eff) = line_intersection(([x1, z11], [x2, z12]), ([x1, z21], [x2, z22]))
+                    break
+                else:
+                    f_eff_jm1 = f_eff_jm1
+            print("gamma", gamma_axis[i], "fa", fa, "f_eff", f_eff)
+            s_gamma.set_val(gamma_axis[i])
+            s_fa.set_val(fa)
+            adv_data = np.empty(len(r_axis))
+            if heatmap_grind:
+                adv_data = mp_grinding_frequency(r_axis, gamma_axis[i], s_slot_gap.val, fa, s_fb.val)
+            else:
+                for (j, val) in zip(range(len(r_axis)), r_axis):
+                    adv_data[j] = block_frequency(1.0 - val, gamma_axis[i], s_slot_gap.val, fa, s_fb.val, 0.0)
+            cb = update_cont(radio_var, np.asarray(adv_data), False)
+            for (j, val) in zip(range(len(cb) - 1), cb):
+                z[j, i] = val - z[j, i]
+        z_min, z_max = -np.abs(z).max(), np.abs(z).max()
+        fig4, ax4 = plt.subplots()
+        c = ax4.pcolormesh(x, y, z, cmap='RdBu', vmin=z_min, vmax=z_max)
+        ax4.set_title('Relative Consistency Bound with $f_{effective}$ = ' + str(target_f_eff))
+        ax4.axis([x.min(), x.max(), y.min(), y.max()])
+        ax4.set(xlabel="Blocks per Delay Interval $(f_{effective} * \Delta)$")
+        ax4.set(ylabel="Gamma (Forging Window Cutoff)")
+        fig4.colorbar(c, ax=ax4)
+        plt.show(block=False)
+
+
+    def update_consistency(adv_data=np.asarray([]), show=True):
         global curve_consistency, curve_pow, block_per_delay, pow_consistency_bound, f_effective
-        curve_pow.remove()
-        curve_consistency.remove()
+        if show:
+            curve_pow.remove()
+            curve_consistency.remove()
         scale_factor = 1
         f_effective = np.amax(zv2)
         block_per_delay = np.linspace(0.0, np.amax(pb3d[1, :]) * f_effective * scale_factor, n_cons_plt)
         pow_consistency_bound = v_pow_bound(block_per_delay)
         consistency_bound = v_pow_bound(block_per_delay)
-        window = 0.01
+        window = 0.005
         w0 = 0.005
         c0 = 0.5
         if len(adv_data) == 0:
-            for d in np.array(range(0, scale_factor*n_cons_plt, scale_factor)):
+            for d in np.array(range(0, scale_factor * n_cons_plt, scale_factor)):
                 i = 0
                 while i < max_iter:
                     try:
-                        x1 = c0-window
-                        x2 = c0+window
+                        x1 = c0 - window
+                        x2 = c0 + window
                         z11 = block_frequency(x1, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, d)
                         z12 = block_frequency(x2, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, d)
-                        z21 = block_frequency(1.0-x1, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, 0)
-                        z22 = block_frequency(1.0-x2, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, 0)
+                        z21 = block_frequency(1.0 - x1, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, 0)
+                        z22 = block_frequency(1.0 - x2, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, 0)
                         (xi, zi) = line_intersection(([x1, z11], [x2, z12]), ([x1, z21], [x2, z22]))
-                        consistency_bound[d//scale_factor] = 1.0 - xi
+                        consistency_bound[d // scale_factor] = 1.0 - xi
                         c0 = xi
                         i = max_iter
                     except ZeroDivisionError:
@@ -488,95 +576,87 @@ if __name__ == '__main__':
         else:
             interp = interpolate.interp1d(r_axis, adv_data, kind="cubic")
             c0, z0 = find_intersection(zv[0, :], interp(xv[0, :]), xv[0, :])
-            for d in np.array(range(0, scale_factor*n_cons_plt, scale_factor)):
+            for d in np.array(range(0, scale_factor * n_cons_plt, scale_factor)):
                 i = 0
                 while i < max_iter:
                     try:
-                        x1 = c0-window
-                        x2 = c0+window
+                        x1 = c0 - window
+                        x2 = c0 + window
                         z11 = block_frequency(x1, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, d)
                         z12 = block_frequency(x2, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, d)
                         z21 = interp(x1)
                         z22 = interp(x2)
                         (xi, zi) = line_intersection(([x1, z11], [x2, z12]), ([x1, z21], [x2, z22]))
-                        consistency_bound[d//scale_factor] = 1.0 - xi
+                        consistency_bound[d // scale_factor] = 1.0 - xi
                         c0 = xi
                         i = max_iter
                     except ZeroDivisionError:
                         window = window + w0
                         i = i + 1
                         print("increasing window")
-
-        curve_consistency, = ax3.plot(block_per_delay, consistency_bound, label="PoS", color='g')
-        curve_pow, = ax3.plot(block_per_delay, pow_consistency_bound, label="PoW", color='b', linestyle=':')
-        ax3.relim()
-        ax3.autoscale_view()
-
-
-    def update_consistency_old():
-        global curve_consistency, curve_pow, block_per_delay, pow_consistency_bound, f_effective
-        curve_pow.remove()
-        curve_consistency.remove()
-        f_effective = np.amax(zv2)
-        curve_consistency, = ax3.plot(pb3d[1, :] * f_effective, 1.0 - pb3d[0, :], label="PoS", color='g')
-        block_per_delay = np.linspace(0.0, np.amax(pb3d[1, :] * f_effective), len(pb3d[1, :]))
-        pow_consistency_bound = v_pow_bound(block_per_delay)
-        curve_pow, = ax3.plot(block_per_delay, pow_consistency_bound, label="PoW", color='b', linestyle=':')
-        ax3.relim()
-        ax3.autoscale_view()
+        if show:
+            curve_consistency, = ax3.plot(block_per_delay, consistency_bound, label="PoS", color='g')
+            curve_pow, = ax3.plot(block_per_delay, pow_consistency_bound, label="PoW", color='b', linestyle=':')
+            ax3.relim()
+            ax3.autoscale_view()
+        return consistency_bound
 
 
-    def update_cont(label):
+    def update_cont(label, adv_data=np.asarray([]), show=True):
         global surf1, surf2, scatter, radio_var
         ch = 'winter'
         ca = 'autumn'
-        surf1.remove()
-        surf2.remove()
+        if show:
+            surf1.remove()
+            surf2.remove()
         radio_var = label
         if radio_var == 'gamma':
             for i in range(nx):
                 for j in range(ny):
                     zv[j, i] = block_frequency(xv[j, i], yvi[j, i], s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val)
-                    zv2[j, i] = block_frequency(1.0-xv[j, i], yvi[j, i], s_slot_gap.val, s_fa.val, s_fb.val, 0)
+                    zv2[j, i] = block_frequency(1.0 - xv[j, i], yvi[j, i], s_slot_gap.val, s_fa.val, s_fb.val, 0)
             for j in range(ny):
                 pbx, pbz = find_intersection(zv[j, :], zv2[j, :], xv[j, :])
                 pb3d[0, j] = pbx
                 pb3d[1, j] = yvi[j, 0]
                 pb3d[2, j] = pbz
-            surf1 = ax2.plot_surface(xv, yvi, zv, linewidth=0, antialiased=True, cmap=ch, alpha=0.5)
-            surf2 = ax2.plot_surface(xv, yvi, zv2, linewidth=0, antialiased=True, cmap=ca, alpha=0.5)
-            scatter._offsets3d = (pb3d[0, :], pb3d[1, :], pb3d[2, :])
+            if show:
+                surf1 = ax2.plot_surface(xv, yvi, zv, linewidth=0, antialiased=True, cmap=ch, alpha=0.5)
+                surf2 = ax2.plot_surface(xv, yvi, zv2, linewidth=0, antialiased=True, cmap=ca, alpha=0.5)
+                scatter._offsets3d = (pb3d[0, :], pb3d[1, :], pb3d[2, :])
         if radio_var == 'slot gap':
             for i in range(nx):
                 for j in range(ny):
                     zv[j, i] = block_frequency(xv[j, i], s_gamma.val, yvi[j, i], s_fa.val, s_fb.val, s_delay.val)
-                    zv2[j, i] = block_frequency(1.0-xv[j, i], s_gamma.val, yvi[j, i], s_fa.val, s_fb.val, 0)
+                    zv2[j, i] = block_frequency(1.0 - xv[j, i], s_gamma.val, yvi[j, i], s_fa.val, s_fb.val, 0)
             for j in range(ny):
                 pbx, pbz = find_intersection(zv[j, :], zv2[j, :], xv[j, :])
                 pb3d[0, j] = pbx
                 pb3d[1, j] = yvi[j, 0]
                 pb3d[2, j] = pbz
-            surf1 = ax2.plot_surface(xv, yvi, zv, linewidth=0, antialiased=True, cmap=ch, alpha=0.5)
-            surf2 = ax2.plot_surface(xv, yvi, zv2, linewidth=0, antialiased=True, cmap=ca, alpha=0.5)
-            scatter._offsets3d = (pb3d[0, :], pb3d[1, :], pb3d[2, :])
+            if show:
+                surf1 = ax2.plot_surface(xv, yvi, zv, linewidth=0, antialiased=True, cmap=ch, alpha=0.5)
+                surf2 = ax2.plot_surface(xv, yvi, zv2, linewidth=0, antialiased=True, cmap=ca, alpha=0.5)
+                scatter._offsets3d = (pb3d[0, :], pb3d[1, :], pb3d[2, :])
         if radio_var == 'fa':
             for i in range(nx):
                 for j in range(ny):
                     zv[j, i] = block_frequency(xv[j, i], s_gamma.val, s_slot_gap.val, yv[j, i], s_fb.val, s_delay.val)
-                    zv2[j, i] = block_frequency(1.0-xv[j, i], s_gamma.val, s_slot_gap.val, yv[j, i], s_fb.val, 0)
+                    zv2[j, i] = block_frequency(1.0 - xv[j, i], s_gamma.val, s_slot_gap.val, yv[j, i], s_fb.val, 0)
             for j in range(ny):
                 pbx, pbz = find_intersection(zv[j, :], zv2[j, :], xv[j, :])
                 pb3d[0, j] = pbx
                 pb3d[1, j] = yv[j, 0]
                 pb3d[2, j] = pbz
-            surf1 = ax2.plot_surface(xv, yv, zv, linewidth=0, antialiased=True, cmap=ch, alpha=0.5)
-            surf2 = ax2.plot_surface(xv, yv, zv2, linewidth=0, antialiased=True, cmap=ca, alpha=0.5)
-            scatter._offsets3d = (pb3d[0, :], pb3d[1, :], pb3d[2, :])
+            if show:
+                surf1 = ax2.plot_surface(xv, yv, zv, linewidth=0, antialiased=True, cmap=ch, alpha=0.5)
+                surf2 = ax2.plot_surface(xv, yv, zv2, linewidth=0, antialiased=True, cmap=ca, alpha=0.5)
+                scatter._offsets3d = (pb3d[0, :], pb3d[1, :], pb3d[2, :])
         if radio_var == 'fb':
             for i in range(nx):
                 for j in range(ny):
                     zv[j, i] = block_frequency(xv[j, i], s_gamma.val, s_slot_gap.val, s_fa.val, yv[j, i], s_delay.val)
-                    zv2[j, i] = block_frequency(1.0-xv[j, i], s_gamma.val, s_slot_gap.val, s_fa.val, yv[j, i], 0)
+                    zv2[j, i] = block_frequency(1.0 - xv[j, i], s_gamma.val, s_slot_gap.val, s_fa.val, yv[j, i], 0)
             for j in range(ny):
                 pbx, pbz = find_intersection(zv[j, :], zv2[j, :], xv[j, :])
                 pb3d[0, j] = pbx
@@ -589,29 +669,32 @@ if __name__ == '__main__':
             for i in range(nx):
                 for j in range(ny):
                     zv[j, i] = block_frequency(xv[j, i], s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, yvi[j, i])
-                    zv2[j, i] = block_frequency(1.0-xv[j, i], s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, 0)
+                    zv2[j, i] = block_frequency(1.0 - xv[j, i], s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, 0)
             for j in range(ny):
                 pbx, pbz = find_intersection(zv[j, :], zv2[j, :], xv[j, :])
                 pb3d[0, j] = pbx
                 pb3d[1, j] = yvi[j, 0]
                 pb3d[2, j] = pbz
-            surf1 = ax2.plot_surface(xv, yvi, zv, linewidth=0, antialiased=True, cmap=ch, alpha=0.5)
-            surf2 = ax2.plot_surface(xv, yvi, zv2, linewidth=0, antialiased=True, cmap=ca, alpha=0.5)
-            scatter._offsets3d = (pb3d[0, :], pb3d[1, :], pb3d[2, :])
-        ax2.set_ylabel(label)
-        ax2.relim()
-        ax2.autoscale_view(tight=True)
-        ax2.set_zlim3d(0.0, min(1.0, max(np.amax(zv), np.amax(zv2))))
-        update_consistency()
-        plt.show(block=False)
+            if show:
+                surf1 = ax2.plot_surface(xv, yvi, zv, linewidth=0, antialiased=True, cmap=ch, alpha=0.5)
+                surf2 = ax2.plot_surface(xv, yvi, zv2, linewidth=0, antialiased=True, cmap=ca, alpha=0.5)
+                scatter._offsets3d = (pb3d[0, :], pb3d[1, :], pb3d[2, :])
+        if show:
+            ax2.set_ylabel(label)
+            ax2.relim()
+            ax2.autoscale_view(tight=True)
+            ax2.set_zlim3d(0.0, min(1.0, max(np.amax(zv), np.amax(zv2))))
+        cb = update_consistency(adv_data, show)
+        if show:
+            plt.show(block=False)
+        return cb
 
 
     def update_gamma(new_gamma):
         new_data = [block_frequency(r, round(new_gamma), s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val) for r in
                     r_axis]
         new_data2 = [block_frequency(1.0 - r, round(new_gamma), s_slot_gap.val, s_fa.val, s_fb.val, 0) for r in r_axis]
-        new_density = [n_d(d, 1.0, round(new_gamma), s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val) for d in
-                       delta_axis]
+        new_density = pdf(delta_axis, 1.0, round(new_gamma), s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val)
         line0.set_ydata(new_density)
         line1.set_ydata(new_data)
         line2.set_ydata(new_data2)
@@ -632,8 +715,7 @@ if __name__ == '__main__':
         new_data = [block_frequency(r, s_gamma.val, round(new_slot_gap), s_fa.val, s_fb.val, s_delay.val) for r in
                     r_axis]
         new_data2 = [block_frequency(1.0 - r, s_gamma.val, round(new_slot_gap), s_fa.val, s_fb.val, 0) for r in r_axis]
-        new_density = [n_d(d, 1.0, s_gamma.val, round(new_slot_gap), s_fa.val, s_fb.val, s_delay.val) for d in
-                       delta_axis]
+        new_density = pdf(delta_axis, 1.0, s_gamma.val, round(new_slot_gap), s_fa.val, s_fb.val, s_delay.val)
         line0.set_ydata(new_density)
         line1.set_ydata(new_data)
         line2.set_ydata(new_data2)
@@ -653,7 +735,7 @@ if __name__ == '__main__':
     def update_fa(new_fa):
         new_data = [block_frequency(r, s_gamma.val, s_slot_gap.val, new_fa, s_fb.val, s_delay.val) for r in r_axis]
         new_data2 = [block_frequency(1.0 - r, s_gamma.val, s_slot_gap.val, new_fa, s_fb.val, 0) for r in r_axis]
-        new_density = [n_d(d, 1.0, s_gamma.val, s_slot_gap.val, new_fa, s_fb.val, s_delay.val) for d in delta_axis]
+        new_density = pdf(delta_axis, 1.0, s_gamma.val, s_slot_gap.val, new_fa, s_fb.val, s_delay.val)
         line0.set_ydata(new_density)
         line1.set_ydata(new_data)
         line2.set_ydata(new_data2)
@@ -673,7 +755,7 @@ if __name__ == '__main__':
     def update_fb(new_fb):
         new_data = [block_frequency(r, s_gamma.val, s_slot_gap.val, s_fa.val, new_fb, s_delay.val) for r in r_axis]
         new_data2 = [block_frequency(1.0 - r, s_gamma.val, s_slot_gap.val, s_fa.val, new_fb, 0) for r in r_axis]
-        new_density = [n_d(d, 1.0, s_gamma.val, s_slot_gap.val, s_fa.val, new_fb, s_delay.val) for d in delta_axis]
+        new_density = pdf(delta_axis, 1.0, s_gamma.val, s_slot_gap.val, s_fa.val, new_fb, s_delay.val)
         line0.set_ydata(new_density)
         line1.set_ydata(new_data)
         line2.set_ydata(new_data2)
@@ -694,8 +776,7 @@ if __name__ == '__main__':
         new_data = [block_frequency(r, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, round(new_delay)) for r in
                     r_axis]
         new_data2 = [block_frequency(1.0 - r, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, 0) for r in r_axis]
-        new_density = [n_d(d, 1.0, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, round(new_delay)) for d in
-                       delta_axis]
+        new_density = pdf(delta_axis, 1.0, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, round(new_delay))
         line0.set_ydata(new_density)
         line1.set_ydata(new_data)
         line2.set_ydata(new_data2)
@@ -716,7 +797,7 @@ if __name__ == '__main__':
         new_data = [block_frequency(r, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val) for r in r_axis]
         new_data2 = [block_frequency(1.0 - r, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, 0) for r in r_axis]
         new_data3 = mp_grinding_frequency(r_axis, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val)
-        new_density = [n_d(d, 1.0, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val) for d in delta_axis]
+        new_density = pdf(delta_axis, 1.0, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val)
         line0.set_ydata(new_density)
         line1.set_ydata(new_data)
         line2.set_ydata(new_data2)
@@ -742,6 +823,7 @@ if __name__ == '__main__':
     s_fb.on_changed(update_fb)
     s_delay.on_changed(update_delay)
     b_grind.on_clicked(update_grind)
+    b_plot_consist.on_clicked(plot_consistency_heatmap)
     radio.on_clicked(update_cont)
 
 plt.show()
