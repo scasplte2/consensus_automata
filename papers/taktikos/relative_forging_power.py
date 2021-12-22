@@ -44,7 +44,7 @@ heatmap_grind = False
 # Numerical method used in probability density function calculation
 numerical_method = "trunc"
 # Use a specified difficulty curve from txt
-user_defined_curve = False
+user_defined_curve = True
 
 # Domain of slot intervals in all calculations
 delta_axis = np.arange(0, gamma_max + 1)
