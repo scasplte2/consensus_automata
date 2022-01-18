@@ -26,12 +26,12 @@ nx, ny = (10, 10)
 # Number of data points for consistency contour
 n_cons_plt = 100
 # Target chain growth for heatmap series over varying gamma and fa
-target_f_eff = 0.15
+target_f_eff = 0.075
 
 # Initial Snowplow curve params
 gamma_init = 0
 fa_init = 0.5
-fb_init = 0.03
+fb_init = 0.05
 slot_gap_init = 0
 
 # Initial delay value \Delta in semi-synchronous delay model
@@ -44,7 +44,7 @@ heatmap_grind = False
 # Numerical method used in probability density function calculation
 numerical_method = "trunc"
 # Use a specified difficulty curve from txt
-user_defined_curve = True
+user_defined_curve = False
 
 # Domain of slot intervals in all calculations
 delta_axis = np.arange(0, gamma_max + 1)
@@ -52,12 +52,19 @@ delta_axis = np.arange(0, gamma_max + 1)
 r_axis = np.linspace(0.0, 1.0, 20)
 
 # User defined curve TODO add txt file input
-difficulty_curve = (signal.sawtooth(2 * np.pi * 0.05 * delta_axis) + 1.0) / 2.0
+difficulty_curve = np.sqrt(delta_axis)*0.01
+# difficulty_curve = delta_axis*delta_axis*0.0005
+# difficulty_curve = (delta_axis*0.02*signal.sawtooth(2 * np.pi * 0.1 * delta_axis) + 1.0) / 2.0
+
+# Settlement depth for plotting
+k_settle = 10
 
 
 # Proof-of-Work consistency bound, approximation of consistency bound derived from
 # https://doi.org/10.1145/3372297.3423365
 # Serves as baseline of comparison for numerical techniques as well as Proof-of-Stake vs Proof-of-Work
+
+
 def pow_bound(x):
     if x > 0.0:
         return 0.5 + (2.0 - np.sqrt(x * x + 4.0)) / (2.0 * x)
@@ -66,6 +73,24 @@ def pow_bound(x):
 
 
 v_pow_bound = np.vectorize(pow_bound)
+
+
+def log_power(arg1, arg2):
+    if arg1*arg2 <= 0.0:
+        return float('nan')
+    elif arg1 > arg2:
+        return np.log10(np.power(4*arg1*arg2, k_settle))
+    else:
+        return 0.0
+
+
+v_log_power = np.vectorize(log_power)
+
+
+def settlement_argument(f_eff_a, f_eff_h):
+    prob_a = np.asarray(f_eff_a)/(np.asarray(f_eff_a) + np.asarray(f_eff_h))
+    prob_h = np.asarray(f_eff_h)/(np.asarray(f_eff_a) + np.asarray(f_eff_h))
+    return v_log_power(prob_h, prob_a)
 
 
 class MyRadioButtons(RadioButtons):
@@ -404,26 +429,33 @@ if __name__ == '__main__':
 
     # Plots
 
-    fig, ax = plt.subplots(1, 2)
-    plt.subplots_adjust(left=0.15, bottom=0.45)
+    fig, ax = plt.subplots(1, 3)
+    fig.set_size_inches(15.5, 6.5)
+    plt.subplots_adjust(left=0.15, bottom=0.45, wspace=0.25)
     init_density = pdf(delta_axis, 1.0, gamma_init, slot_gap_init, fa_init, fb_init, delay_init)
     line0, = ax[0].plot(delta_axis, init_density)
     ax[0].set(xlabel="Slot Interval")
     ax[0].set(ylabel="Probability Density")
 
-    r_init_data = [block_frequency(r, gamma_init, slot_gap_init, fa_init, fb_init, delay_init) for r in r_axis]
+    h_init_data = [block_frequency(r, gamma_init, slot_gap_init, fa_init, fb_init, delay_init) for r in r_axis]
     a_init_data = [block_frequency(1.0 - r, gamma_init, slot_gap_init, fa_init, fb_init, 0) for r in r_axis]
-    line1, = ax[1].plot(r_axis, r_init_data, 'b-', label='honest (r)')
+    line1, = ax[1].plot(r_axis, h_init_data, 'b-', label='honest (r)')
     line2, = ax[1].plot(r_axis, a_init_data, 'r-', label='covert (1-r)')
-    line3, = ax[1].plot([0.0, 1.0], [0.0, max(r_init_data)], 'g-', label='f_eff * r')
+    line3, = ax[1].plot([0.0, 1.0], [0.0, max(h_init_data)], 'g-', label='$f_{\mathrm{effective}} \cdot r$')
     line4, = ax[1].plot(r_axis, a_init_data, color='r', linestyle='dotted', label='grind (1-r)')
 
-    (inter_x, inter_y) = find_intersection(a_init_data, r_init_data, r_axis)
+    (inter_x, inter_y) = find_intersection(a_init_data, h_init_data, r_axis)
 
     dot, = ax[1].plot(inter_x, inter_y, 'ro')
 
     ax[1].set(xlabel="Active Stake (r)")
     ax[1].set(ylabel="Block Frequency (1/slot)")
+
+    ax[2].set(xlabel="Adversarial Stake")
+    ax[2].set(ylabel="$\log_{10}(P_{\mathrm{Settlement Violation}})$ at $k = "+str(k_settle)+"$ blocks")
+    prob_settlement = settlement_argument(a_init_data, h_init_data)
+    line5, = ax[2].plot(np.flip(r_axis), prob_settlement)
+    line6, = ax[2].plot([1.0 - inter_x, 1.0 - inter_x], [np.nanmin(prob_settlement), np.nanmax(prob_settlement)], "r--")
     fig.suptitle("Consistency Bound = " + "{:.2f}".format(1.0 - inter_x))
 
     lim_1 = 0.15
@@ -496,15 +528,26 @@ if __name__ == '__main__':
 
     def plot_consistency_heatmap(val):
         gamma_axis = np.arange(1, gamma_max + 1)
-        num_delta = 100
-        y, x = np.meshgrid(gamma_axis, np.linspace(0.0, 100 * target_f_eff, num_delta))
-        z = v_pow_bound(x)
-        z = z[:-1, :-1]
+        fa_axis = np.linspace(0.0, 1.0, 100)
+        num_delta = gamma_max
+        fig4, ax4 = plt.subplots()
+        y_c, x_c = np.meshgrid(gamma_axis, fa_axis)
+        z_c = np.empty([len(gamma_axis), len(fa_axis)])
+        for (i, val_i) in zip(range(len(gamma_axis)), gamma_axis):
+            for (j, val_j) in zip(range(len(fa_axis)), fa_axis):
+                z_c[j, i] = np.log(block_frequency(1.0, val_i, s_slot_gap.val, val_j, s_fb.val, 0))
+        ax4.contour(x_c, y_c, z_c, levels=40)
+        ax4.set(xlabel="$f_A$")
+        ax4.set(ylabel="$\gamma$")
+        plt.show(block=False)
+
+        y_hm, x_hm = np.meshgrid(gamma_axis, np.linspace(0.0, 100 * target_f_eff, num_delta))
+        z_hm = v_pow_bound(x_hm)
+        z_hm = z_hm[:-1, :-1]
         fa = 0.0
         f_eff = 0.0
         f_eff_jm1 = 0.0
         for i in range(gamma_max - 1):
-            fa_axis = np.linspace(0.0, 1.0, 100)
             for (j, val) in zip(range(len(fa_axis)), fa_axis):
                 f_eff_j = block_frequency(1.0, gamma_axis[i], s_slot_gap.val, val, s_fb.val, 0)
                 if f_eff_j > target_f_eff:
@@ -529,15 +572,15 @@ if __name__ == '__main__':
                     adv_data[j] = block_frequency(1.0 - val, gamma_axis[i], s_slot_gap.val, fa, s_fb.val, 0.0)
             cb = update_cont(radio_var, np.asarray(adv_data), False)
             for (j, val) in zip(range(len(cb) - 1), cb):
-                z[j, i] = val - z[j, i]
-        z_min, z_max = -np.abs(z).max(), np.abs(z).max()
-        fig4, ax4 = plt.subplots()
-        c = ax4.pcolormesh(x, y, z, cmap='RdBu', vmin=z_min, vmax=z_max)
-        ax4.set_title('Relative Consistency Bound with $f_{effective}$ = ' + str(target_f_eff))
-        ax4.axis([x.min(), x.max(), y.min(), y.max()])
-        ax4.set(xlabel="Blocks per Delay Interval $(f_{effective} * \Delta)$")
-        ax4.set(ylabel="Gamma (Forging Window Cutoff)")
-        fig4.colorbar(c, ax=ax4)
+                z_hm[j, i] = val - z_hm[j, i]
+        z_min, z_max = -np.abs(z_hm).max(), np.abs(z_hm).max()
+        fig5, ax5 = plt.subplots()
+        c = ax5.pcolormesh(x_hm, y_hm, z_hm, cmap='RdBu', vmin=z_min, vmax=z_max)
+        ax5.set_title('Relative Consistency Bound with $f_{effective}$ = ' + str(target_f_eff))
+        ax5.axis([x_hm.min(), x_hm.max(), y_hm.min(), y_hm.max()])
+        ax5.set(xlabel="Blocks per Delay Interval $(f_{effective} * \Delta)$")
+        ax5.set(ylabel="Gamma (Forging Window Cutoff)")
+        fig5.colorbar(c, ax=ax5)
         plt.show(block=False)
 
 
@@ -546,7 +589,7 @@ if __name__ == '__main__':
         if show:
             curve_pow.remove()
             curve_consistency.remove()
-        scale_factor = 1
+        scale_factor = 2
         f_effective = np.amax(zv2)
         block_per_delay = np.linspace(0.0, np.amax(pb3d[1, :]) * f_effective * scale_factor, n_cons_plt)
         pow_consistency_bound = v_pow_bound(block_per_delay)
@@ -700,13 +743,19 @@ if __name__ == '__main__':
         line2.set_ydata(new_data2)
         line3.set_ydata([0.0, max(new_data)])
         line4.set_ydata(new_data2)
+        global prob_settlement
+        prob_settlement = settlement_argument(new_data2, new_data)
+        line5.set_ydata(prob_settlement)
         (new_inter_x, new_inter_y) = find_intersection(new_data2, new_data, r_axis)
         dot.set_xdata(new_inter_x)
         dot.set_ydata(new_inter_y)
+        line6.set_data([1.0 - new_inter_x, 1.0 - new_inter_x], [np.nanmin(prob_settlement), np.nanmax(prob_settlement)])
         ax[0].relim()
         ax[0].autoscale_view()
         ax[1].relim()
         ax[1].autoscale_view()
+        ax[2].relim()
+        ax[2].autoscale_view()
         update_cont(radio_var)
         fig.suptitle("Consistency Bound = " + "{:.2f}".format(1.0 - new_inter_x))
 
@@ -721,13 +770,19 @@ if __name__ == '__main__':
         line2.set_ydata(new_data2)
         line3.set_ydata([0.0, max(new_data)])
         line4.set_ydata(new_data2)
+        global prob_settlement
+        prob_settlement = settlement_argument(new_data2, new_data)
+        line5.set_ydata(prob_settlement)
         (new_inter_x, new_inter_y) = find_intersection(new_data2, new_data, r_axis)
         dot.set_xdata(new_inter_x)
         dot.set_ydata(new_inter_y)
+        line6.set_data([1.0 - new_inter_x, 1.0 - new_inter_x], [np.nanmin(prob_settlement), np.nanmax(prob_settlement)])
         ax[0].relim()
         ax[0].autoscale_view()
         ax[1].relim()
         ax[1].autoscale_view()
+        ax[2].relim()
+        ax[2].autoscale_view()
         update_cont(radio_var)
         fig.suptitle("Consistency Bound = " + "{:.2f}".format(1.0 - new_inter_x))
 
@@ -741,13 +796,19 @@ if __name__ == '__main__':
         line2.set_ydata(new_data2)
         line3.set_ydata([0.0, max(new_data)])
         line4.set_ydata(new_data2)
+        global prob_settlement
+        prob_settlement = settlement_argument(new_data2, new_data)
+        line5.set_ydata(prob_settlement)
         (new_inter_x, new_inter_y) = find_intersection(new_data2, new_data, r_axis)
         dot.set_xdata(new_inter_x)
         dot.set_ydata(new_inter_y)
+        line6.set_data([1.0 - new_inter_x, 1.0 - new_inter_x], [np.nanmin(prob_settlement), np.nanmax(prob_settlement)])
         ax[0].relim()
         ax[0].autoscale_view()
         ax[1].relim()
         ax[1].autoscale_view()
+        ax[2].relim()
+        ax[2].autoscale_view()
         update_cont(radio_var)
         fig.suptitle("Consistency Bound = " + "{:.2f}".format(1.0 - new_inter_x))
 
@@ -761,13 +822,19 @@ if __name__ == '__main__':
         line2.set_ydata(new_data2)
         line3.set_ydata([0.0, max(new_data)])
         line4.set_ydata(new_data2)
+        global prob_settlement
+        prob_settlement = settlement_argument(new_data2, new_data)
+        line5.set_ydata(prob_settlement)
         (new_inter_x, new_inter_y) = find_intersection(new_data2, new_data, r_axis)
         dot.set_xdata(new_inter_x)
         dot.set_ydata(new_inter_y)
+        line6.set_data([1.0 - new_inter_x, 1.0 - new_inter_x], [np.nanmin(prob_settlement), np.nanmax(prob_settlement)])
         ax[0].relim()
         ax[0].autoscale_view()
         ax[1].relim()
         ax[1].autoscale_view()
+        ax[2].relim()
+        ax[2].autoscale_view()
         update_cont(radio_var)
         fig.suptitle("Consistency Bound = " + "{:.2f}".format(1.0 - new_inter_x))
 
@@ -782,13 +849,19 @@ if __name__ == '__main__':
         line2.set_ydata(new_data2)
         line3.set_ydata([0.0, max(new_data)])
         line4.set_ydata(new_data2)
+        global prob_settlement
+        prob_settlement = settlement_argument(new_data2, new_data)
+        line5.set_ydata(prob_settlement)
         (new_inter_x, new_inter_y) = find_intersection(new_data2, new_data, r_axis)
         dot.set_xdata(new_inter_x)
         dot.set_ydata(new_inter_y)
+        line6.set_data([1.0 - new_inter_x, 1.0 - new_inter_x], [np.nanmin(prob_settlement), np.nanmax(prob_settlement)])
         ax[0].relim()
         ax[0].autoscale_view()
         ax[1].relim()
         ax[1].autoscale_view()
+        ax[2].relim()
+        ax[2].autoscale_view()
         update_cont(radio_var)
         fig.suptitle("Consistency Bound = " + "{:.2f}".format(1.0 - new_inter_x))
 
@@ -804,13 +877,19 @@ if __name__ == '__main__':
         line3.set_ydata([0.0, max(new_data)])
         line4.set_ydata(new_data3)
         line4.set_linestyle('dotted')
-        (new_inter_x, new_inter_y) = find_intersection(new_data3, new_data, r_axis)
+        global prob_settlement
+        prob_settlement = settlement_argument(new_data2, new_data)
+        line5.set_ydata(prob_settlement)
+        (new_inter_x, new_inter_y) = find_intersection(new_data2, new_data, r_axis)
         dot.set_xdata(new_inter_x)
         dot.set_ydata(new_inter_y)
+        line6.set_data([1.0 - new_inter_x, 1.0 - new_inter_x], [np.nanmin(prob_settlement), np.nanmax(prob_settlement)])
         ax[0].relim()
         ax[0].autoscale_view()
         ax[1].relim()
         ax[1].autoscale_view()
+        ax[2].relim()
+        ax[2].autoscale_view()
         update_cont(radio_var)
         update_consistency(np.asarray(new_data3))
         fig.suptitle("Consistency Bound = " + "{:.2f}".format(1.0 - new_inter_x))
@@ -825,5 +904,6 @@ if __name__ == '__main__':
     b_grind.on_clicked(update_grind)
     b_plot_consist.on_clicked(plot_consistency_heatmap)
     radio.on_clicked(update_cont)
+
 
 plt.show()
