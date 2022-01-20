@@ -59,6 +59,10 @@ difficulty_curve = np.sqrt(delta_axis)*0.01
 # Settlement depth for plotting
 k_settle = 10
 
+# Active stake scale factor (for reproducing honest distribution with (stake_scale*100)% active stake)
+# This caps the adversarial stake as well, corresponding to a situation where (1.0 - stake_scale) is inactive
+# e.g. if stake_scale is 0.2 then there is only 20% of all stake split across honest and adversarial parties
+stake_scale = 1.0
 
 # Proof-of-Work consistency bound, approximation of consistency bound derived from
 # https://doi.org/10.1145/3372297.3423365
@@ -275,17 +279,44 @@ if __name__ == '__main__':
         if use_pow_test:
             return pdf_acc_pow(d, r, fb, delay, acc)
         else:
-            return pdf_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc)
+            return pdf_acc_pos(d, r*stake_scale, gamma, slot_gap, fa, fb, delay, acc)
+
+
+    # def pdf(d_axis, r, gamma, slot_gap, fa, fb, delay):
+    #     out = np.empty(len(d_axis))
+    #     acc = 0.0
+    #     for (i, d) in zip(range(len(d_axis)), d_axis):
+    #         (nd, acc) = pdf_acc(d, r, gamma, slot_gap, fa, fb, delay, acc)
+    #         out[i] = nd
+    #     norm = sum(out)
+    #     return out / norm
 
 
     def pdf(d_axis, r, gamma, slot_gap, fa, fb, delay):
-        out = np.empty(len(d_axis))
-        acc = 0.0
-        for (i, d) in zip(range(len(d_axis)), d_axis):
-            (nd, acc) = pdf_acc(d, r, gamma, slot_gap, fa, fb, delay, acc)
-            out[i] = nd
-        norm = sum(out)
-        return out / norm
+        i = 0
+        done = False
+        old_value = 0.0
+        accumulation = 0.0
+        pdf_a = []
+        while not done and i < max_iter:
+            i = i + 1
+            if i == max_iter:
+                print("Warning: distribution did not converge")
+            (nd, accumulation) = pdf_acc(i, r, gamma, slot_gap, fa, fb, delay, accumulation)
+            # new = i * nd
+            pdf_a.append(nd)
+            new = nd
+            if trunc_error > new > 0.0 and old_value > 0.0:
+                done = True
+            old_value = new
+        norm = sum(pdf_a)
+        pdf_a = np.asarray(pdf_a) / norm
+        if len(pdf_a) > len(d_axis):
+            return pdf_a[:len(d_axis)]
+        elif len(pdf_a) < len(d_axis):
+            return np.pad(pdf_a, [(0, len(d_axis)-len(pdf_a))], mode='constant')
+        else:
+            return pdf_a
 
 
     def pdf_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc):
