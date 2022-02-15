@@ -6,15 +6,17 @@ import multiprocessing as mp
 from matplotlib.widgets import AxesWidget, RadioButtons
 from scipy import interpolate
 from scipy import signal
+from collections import defaultdict
+
 
 # Maximum value of gamma to be plotted
 gamma_max = 100
 # Truncation error in distribution summation as slot-interval diverges
-trunc_error = 1.0e-6
+trunc_error = 1.0e-7
 #  Max number of iterations for convergent series
 max_iter = 10000
 # Number of nonces that the grinding simulation runs over
-total_slots = 200000
+total_slots = 300000
 # Slot axis for grinding simulation
 slots = np.arange(total_slots)
 # Nonces for grinding simulation
@@ -29,10 +31,20 @@ n_cons_plt = 100
 target_f_eff = 0.075
 
 # Initial Snowplow curve params
-gamma_init = 0
+gamma_init = 15
 fa_init = 0.5
 fb_init = 0.05
 slot_gap_init = 0
+
+# Active stake scale factor (for reproducing honest distribution with (stake_scale*100)% active stake)
+# This caps the adversarial stake as well, corresponding to a situation where (1.0 - stake_scale) is inactive
+# e.g. if stake_scale is 0.2 then there is only 20% of all stake split across honest and adversarial parties
+stake_scale = 1.0
+init_stake = 1.0
+
+plot_data = False
+dataFileName = "test.txt"
+
 
 # Initial delay value \Delta in semi-synchronous delay model
 delay_init = 0
@@ -42,9 +54,10 @@ use_pow_test = False
 # Use grinding simulation in heatmap calculation
 heatmap_grind = False
 # Numerical method used in probability density function calculation
-numerical_method = "trunc"
+numerical_method = "pi norm"
 # Use a specified difficulty curve from txt
 user_defined_curve = False
+
 
 # Domain of slot intervals in all calculations
 delta_axis = np.arange(0, gamma_max + 1)
@@ -52,17 +65,12 @@ delta_axis = np.arange(0, gamma_max + 1)
 r_axis = np.linspace(0.0, 1.0, 20)
 
 # User defined curve TODO add txt file input
-difficulty_curve = np.sqrt(delta_axis)*0.01
+# difficulty_curve = np.sqrt(delta_axis)*0.01
 # difficulty_curve = delta_axis*delta_axis*0.0005
-# difficulty_curve = (delta_axis*0.02*signal.sawtooth(2 * np.pi * 0.1 * delta_axis) + 1.0) / 2.0
+difficulty_curve = (signal.sawtooth(2 * np.pi * 0.2 * delta_axis) + 1.0) / 2.0
 
 # Settlement depth for plotting
 k_settle = 10
-
-# Active stake scale factor (for reproducing honest distribution with (stake_scale*100)% active stake)
-# This caps the adversarial stake as well, corresponding to a situation where (1.0 - stake_scale) is inactive
-# e.g. if stake_scale is 0.2 then there is only 20% of all stake split across honest and adversarial parties
-stake_scale = 1.0
 
 # Proof-of-Work consistency bound, approximation of consistency bound derived from
 # https://doi.org/10.1145/3372297.3423365
@@ -165,12 +173,20 @@ def f(delta, gamma, slot_gap, fa, fb):
         return 0.0
     elif delta <= gamma:
         if user_defined_curve:
-            return fa * difficulty_curve[delta]
+            return min(1.0, fa * difficulty_curve[delta])
         else:
             # default snowplow curve
-            return fa * (float(delta - slot_gap)) / float(gamma - slot_gap)
+            return min(1.0, fa * (float(delta - slot_gap)) / float(gamma - slot_gap))
     else:
         return fb
+
+
+def forge_power(r, delta, gamma, slot_gap, fa, fb):
+    if use_pow_test:
+        return fb * r
+    else:
+        b = max(1.0 - f(delta, gamma, slot_gap, fa, fb), 0.0)
+        return 1.0 - np.power(b, r)
 
 
 # Grinding simulation at module level for multiprocessing
@@ -279,57 +295,92 @@ if __name__ == '__main__':
         if use_pow_test:
             return pdf_acc_pow(d, r, fb, delay, acc)
         else:
-            return pdf_acc_pos(d, r*stake_scale, gamma, slot_gap, fa, fb, delay, acc)
+            return pdf_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc)
 
 
-    # def pdf(d_axis, r, gamma, slot_gap, fa, fb, delay):
-    #     out = np.empty(len(d_axis))
-    #     acc = 0.0
-    #     for (i, d) in zip(range(len(d_axis)), d_axis):
-    #         (nd, acc) = pdf_acc(d, r, gamma, slot_gap, fa, fb, delay, acc)
-    #         out[i] = nd
-    #     norm = sum(out)
-    #     return out / norm
+    def pi_acc(d, r, gamma, slot_gap, fa, fb, delay, acc):
+        if use_pow_test:
+            return pi_acc_pow(d, r, fb, delay, acc)
+        else:
+            return pi_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc)
 
+
+    def pdf_old(d_axis, r, gamma, slot_gap, fa, fb, delay):
+        i = 0
+        done = False
+        old_value = 0.0
+        accumulation = 1.0
+        pdf_a = []
+        while not done:
+            (nd, accumulation) = pdf_acc(i, r, gamma, slot_gap, fa, fb, delay, accumulation)
+            if i == max_iter:
+                print("Warning: distribution did not converge", nd, accumulation)
+            if trunc_error > nd > 0.0 and old_value > 0.0 or accumulation == 0.0 or i == max_iter:
+                done = True
+            else:
+                pdf_a.append(nd)
+                old_value = nd
+                i = i + 1
+
+        norm = sum(pdf_a)
+        pdf_a = np.asarray(pdf_a) / norm
+        return np.pad(pdf_a[:len(d_axis)], [(0, max(len(d_axis)-len(pdf_a), 0))], mode='constant')
 
     def pdf(d_axis, r, gamma, slot_gap, fa, fb, delay):
         i = 0
         done = False
-        old_value = 0.0
-        accumulation = 0.0
-        pdf_a = []
-        while not done and i < max_iter:
-            i = i + 1
+        accumulation = 1.0
+        pi = []
+        pdf_ext = []
+        while not done:
+            accumulation = pi_acc(i, r, gamma, slot_gap, fa, fb, delay, accumulation)
             if i == max_iter:
-                print("Warning: distribution did not converge")
-            (nd, accumulation) = pdf_acc(i, r, gamma, slot_gap, fa, fb, delay, accumulation)
-            # new = i * nd
-            pdf_a.append(nd)
-            new = nd
-            if trunc_error > new > 0.0 and old_value > 0.0:
+                print("Warning: distribution did not converge", accumulation)
+            if trunc_error > accumulation >= 0.0 or i == max_iter:
                 done = True
-            old_value = new
-        norm = sum(pdf_a)
-        pdf_a = np.asarray(pdf_a) / norm
-        if len(pdf_a) > len(d_axis):
-            return pdf_a[:len(d_axis)]
-        elif len(pdf_a) < len(d_axis):
-            return np.pad(pdf_a, [(0, len(d_axis)-len(pdf_a))], mode='constant')
+            else:
+                pi.append(accumulation)
+                i = i + 1
+        d = -1
+        norm = sum(pi)
+        if norm == 0.0:
+            print("Warning: stationary distribution summed to zero")
         else:
-            return pdf_a
+            pi = np.asarray(pi) / norm
+        for p in pi:
+            d = d + 1
+            if d > delay:
+                pdf_ext.append(p*forge_power(r, d, gamma, slot_gap, fa, fb))
+            else:
+                pdf_ext.append(0.0)
+        norm2 = sum(pdf_ext)
+        pdf_ext = np.asarray(pdf_ext) / norm2
+        return np.pad(pdf_ext[:len(d_axis)], [(0, max(len(d_axis)-len(pdf_ext), 0))], mode='constant'), np.pad(pi[:len(d_axis)], [(0, max(len(d_axis)-len(pi), 0))], mode='constant')
 
 
     def pdf_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc):
         if d == 1:
             if d > delay:
-                return 1.0 - np.power(max(1.0 - f(d, gamma, slot_gap, fa, fb), 0.0), r), 1.0
+                b = max(1.0 - f(d, gamma, slot_gap, fa, fb), 0.0)
+                if b == 0.0:
+                    return 0.0, acc
+                else:
+                    return 1.0 - np.power(b, stake_scale*r), acc
             else:
-                return 0.0, 1.0
+                return 0.0, acc
         else:
             if d > delay:
-                out2 = np.power(max(1.0 - f(d - 1, gamma, slot_gap, fa, fb), 0.0), r) * acc
-                out1 = (1.0 - np.power(max(1.0 - f(d, gamma, slot_gap, fa, fb), 0.0), r)) * out2
-                return out1, out2
+                b1 = max(1.0 - f(d - 1, gamma, slot_gap, fa, fb), 0.0)
+                b2 = max(1.0 - f(d, gamma, slot_gap, fa, fb), 0.0)
+                if b1 == 0.0:
+                    acc2 = np.power(b1, stake_scale*r) * acc
+                    return (1.0 - np.power(b2, stake_scale*r)) * acc2, acc2
+                else:
+                    acc2 = np.power(b1, stake_scale*r) * acc
+                    if b2 == 0.0:
+                        return acc, 0.0
+                    else:
+                        return (1.0 - np.power(b2, stake_scale*r)) * acc2, acc2
             else:
                 return 0.0, acc
 
@@ -349,6 +400,26 @@ if __name__ == '__main__':
                 return 0.0, acc
 
 
+    def pi_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc):
+        if d == 1:
+            return 1.0
+        else:
+            if d > delay + 1:
+                b1 = max(1.0 - f(d - 1, gamma, slot_gap, fa, fb), 0.0)
+                return np.power(b1, stake_scale*r) * acc
+            else:
+                return acc
+
+
+    def pi_acc_pow(d, r, fb, delay, acc):
+        if d == 1:
+            return 1.0
+        else:
+            if d > delay + 1:
+                return (1.0 - fb * r) * acc
+            else:
+                return acc
+
     # Block frequency functions
 
 
@@ -359,6 +430,8 @@ if __name__ == '__main__':
             return block_frequency_pi(r, gamma, slot_gap, fa, fb, delay)
         if numerical_method == "tail":
             return block_frequency_tail(r, gamma, slot_gap, fa, fb, delay)
+        if numerical_method == "pi norm":
+            return block_frequency_trunc_pi_norm(r, gamma, slot_gap, fa, fb, delay)
         return 0.0
 
 
@@ -401,7 +474,7 @@ if __name__ == '__main__':
     def block_frequency_tail(r, gamma, slot_gap, fa, fb, delay):
         if r > 0.0:
             block_time = 0.0
-            accumulation = 0.0
+            accumulation = 1.0
             ns = int(max(gamma, slot_gap, delay) + 1)
             pdf_a = np.empty([ns])
             for i in range(ns):
@@ -431,25 +504,73 @@ if __name__ == '__main__':
             i = 0
             done = False
             old_value = 0.0
-            accumulation = 0.0
+            accumulation = 1.0
             pdf_a = []
-            while not done and i < max_iter:
-                i = i + 1
-                if i == max_iter:
-                    print("Warning: distribution did not converge")
+            while not done:
                 (nd, accumulation) = pdf_acc(i, r, gamma, slot_gap, fa, fb, delay, accumulation)
-                # new = i * nd
-                pdf_a.append(nd)
-                new = nd
-                if trunc_error > new > 0.0 and old_value > 0.0:
+                if i == max_iter:
+                    print("Warning: distribution did not converge", nd, accumulation)
+                if trunc_error > nd > 0.0 and old_value > 0.0 or accumulation == 0.0 or i == max_iter:
                     done = True
-                old_value = new
-            i = 0
+                else:
+                    pdf_a.append(nd)
+                    old_value = nd
+                    i = i + 1
+            d = 0
             norm = sum(pdf_a)
-            pdf_a = np.asarray(pdf_a) / norm
+            if norm == 0.0:
+                print("Warning: distribution summed to zero")
+            else:
+                pdf_a = np.asarray(pdf_a) / norm
             for nd in pdf_a:
-                i = i + 1
-                res = res + i * nd
+                d = d + 1
+                res = res + d * nd
+            if res > 0.0:
+                return 1.0 / res
+            else:
+                return 0.0
+        else:
+            return 0.0
+
+
+    def block_frequency_trunc_pi_norm(r, gamma, slot_gap, fa, fb, delay):
+        res = 0.0
+        if r > 0.0:
+            i = 0
+            done = False
+            accumulation = 1.0
+            pi = []
+            pdf_ext = []
+            while not done:
+                accumulation = pi_acc(i, r, gamma, slot_gap, fa, fb, delay, accumulation)
+                if i == max_iter:
+                    print("Warning: distribution did not converge", accumulation)
+                if trunc_error > accumulation >= 0.0 or i == max_iter:
+                    done = True
+                else:
+                    pi.append(accumulation)
+                    i = i + 1
+            d = -1
+            norm = sum(pi)
+            if norm == 0.0:
+                print("Warning: stationary distribution summed to zero")
+            else:
+                pi = np.asarray(pi) / norm
+            for p in pi:
+                d = d + 1
+                if d > delay:
+                    pdf_ext.append(p*forge_power(r, d, gamma, slot_gap, fa, fb))
+                else:
+                    pdf_ext.append(0.0)
+            norm2 = sum(pdf_ext)
+            if norm2 == 0.0:
+                print("Warning: stationary distribution summed to zero")
+            else:
+                pdf_ext = np.asarray(pdf_ext) / norm2
+            d = -1
+            for nd in pdf_ext:
+                d = d + 1
+                res = res + d * nd
             if res > 0.0:
                 return 1.0 / res
             else:
@@ -463,10 +584,13 @@ if __name__ == '__main__':
     fig, ax = plt.subplots(1, 3)
     fig.set_size_inches(15.5, 6.5)
     plt.subplots_adjust(left=0.15, bottom=0.45, wspace=0.25)
-    init_density = pdf(delta_axis, 1.0, gamma_init, slot_gap_init, fa_init, fb_init, delay_init)
-    line0, = ax[0].plot(delta_axis, init_density)
+    init_density, init_pi = pdf(delta_axis, init_stake, gamma_init, slot_gap_init, fa_init, fb_init, delay_init)
+    line0, = ax[0].plot(delta_axis, init_density, label="PDF of Honest Extensions")
+    line00, = ax[0].plot(delta_axis, init_pi, label="Stationary Distribution")
+    line000, = ax[0].plot(delta_axis, [f(i, gamma_init, slot_gap_init, fa_init, fb_init) for i in delta_axis], 'g:', label="Difficulty Curve")
+    ax[0].set_ylim([0, max(np.amax(init_density), np.amax(init_pi))])
     ax[0].set(xlabel="Slot Interval")
-    ax[0].set(ylabel="Probability Density")
+    ax[0].set(ylabel="Number Density")
 
     h_init_data = [block_frequency(r, gamma_init, slot_gap_init, fa_init, fb_init, delay_init) for r in r_axis]
     a_init_data = [block_frequency(1.0 - r, gamma_init, slot_gap_init, fa_init, fb_init, 0) for r in r_axis]
@@ -504,7 +628,7 @@ if __name__ == '__main__':
     s_delay = Slider(ax_delay, 'delay', 0, gamma_max, valinit=delay_init, valfmt="%i")
 
     ax_fa = plt.axes([lim_1, lim_2[3], lim_3, lim_4])
-    s_fa = Slider(ax_fa, 'fA', 0.001, 0.99, valinit=fa_init)
+    s_fa = Slider(ax_fa, 'fA', 0.0, 1.0, valinit=fa_init)
 
     ax_fb = plt.axes([lim_1, lim_2[4], lim_3, lim_4])
     s_fb = Slider(ax_fb, 'fB', 0.001, 0.99, valinit=fb_init)
@@ -555,6 +679,38 @@ if __name__ == '__main__':
     ax3.set(xlabel="Blocks per Delay Interval $(f_{effective} * \Delta)$")
     ax3.set(ylabel="Consistency Bound")
     ax3.legend()
+
+
+    def plot_data_points():
+        def multi_dict(k, v):
+            if k == 1:
+                return defaultdict(v)
+            else:
+                return defaultdict(lambda: multi_dict(k - 1, v))
+        hist_data = multi_dict(1, int)
+        data = np.loadtxt(dataFileName, dtype=int)
+        data_unique = np.unique(data, axis=0)
+        dat = data_unique[np.argsort(data_unique[:,0])]
+        i = 1
+        for row in dat:
+            if i < len(dat):
+                if row[0] != dat[i][0]-1:
+                    print("error: "+str(i))
+                else:
+                    delta = dat[i][1]-row[1]
+                    hist_data[delta] += 1
+                i += 1
+        hist = hist_data
+        deltas = []
+        values = []
+        for key in hist:
+            deltas.append(key)
+            values.append(hist[key])
+        norm = sum(values)
+        def normalize(number):
+            return float(number)/norm
+        norm_values = [normalize(number) for number in values]
+        ax[0].scatter(deltas, norm_values, color="g", marker="x", label="Data from Network")
 
 
     def plot_consistency_heatmap(val):
@@ -616,6 +772,7 @@ if __name__ == '__main__':
 
 
     def update_consistency(adv_data=np.asarray([]), show=True):
+        max_iter_cons = 10
         global curve_consistency, curve_pow, block_per_delay, pow_consistency_bound, f_effective
         if show:
             curve_pow.remove()
@@ -631,7 +788,7 @@ if __name__ == '__main__':
         if len(adv_data) == 0:
             for d in np.array(range(0, scale_factor * n_cons_plt, scale_factor)):
                 i = 0
-                while i < max_iter:
+                while i < max_iter_cons:
                     try:
                         x1 = c0 - window
                         x2 = c0 + window
@@ -642,17 +799,17 @@ if __name__ == '__main__':
                         (xi, zi) = line_intersection(([x1, z11], [x2, z12]), ([x1, z21], [x2, z22]))
                         consistency_bound[d // scale_factor] = 1.0 - xi
                         c0 = xi
-                        i = max_iter
+                        i = max_iter_cons
                     except ZeroDivisionError:
                         window = window + w0
                         i = i + 1
-                        print("increasing window")
+                        # print("increasing window")
         else:
             interp = interpolate.interp1d(r_axis, adv_data, kind="cubic")
             c0, z0 = find_intersection(zv[0, :], interp(xv[0, :]), xv[0, :])
             for d in np.array(range(0, scale_factor * n_cons_plt, scale_factor)):
                 i = 0
-                while i < max_iter:
+                while i < max_iter_cons:
                     try:
                         x1 = c0 - window
                         x2 = c0 + window
@@ -663,11 +820,11 @@ if __name__ == '__main__':
                         (xi, zi) = line_intersection(([x1, z11], [x2, z12]), ([x1, z21], [x2, z22]))
                         consistency_bound[d // scale_factor] = 1.0 - xi
                         c0 = xi
-                        i = max_iter
+                        i = max_iter_cons
                     except ZeroDivisionError:
                         window = window + w0
                         i = i + 1
-                        print("increasing window")
+                        # print("increasing window")
         if show:
             curve_consistency, = ax3.plot(block_per_delay, consistency_bound, label="PoS", color='g')
             curve_pow, = ax3.plot(block_per_delay, pow_consistency_bound, label="PoW", color='b', linestyle=':')
@@ -768,8 +925,10 @@ if __name__ == '__main__':
         new_data = [block_frequency(r, round(new_gamma), s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val) for r in
                     r_axis]
         new_data2 = [block_frequency(1.0 - r, round(new_gamma), s_slot_gap.val, s_fa.val, s_fb.val, 0) for r in r_axis]
-        new_density = pdf(delta_axis, 1.0, round(new_gamma), s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val)
+        new_density, new_pi = pdf(delta_axis, 1.0, round(new_gamma), s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val)
         line0.set_ydata(new_density)
+        line00.set_ydata(new_pi)
+        line000.set_ydata([f(i, round(new_gamma), s_slot_gap.val, s_fa.val, s_fb.val) for i in delta_axis])
         line1.set_ydata(new_data)
         line2.set_ydata(new_data2)
         line3.set_ydata([0.0, max(new_data)])
@@ -783,6 +942,7 @@ if __name__ == '__main__':
         line6.set_data([1.0 - new_inter_x, 1.0 - new_inter_x], [np.nanmin(prob_settlement), np.nanmax(prob_settlement)])
         ax[0].relim()
         ax[0].autoscale_view()
+        ax[0].set_ylim([0, max(np.amax(new_density), np.amax(new_pi))])
         ax[1].relim()
         ax[1].autoscale_view()
         ax[2].relim()
@@ -795,8 +955,10 @@ if __name__ == '__main__':
         new_data = [block_frequency(r, s_gamma.val, round(new_slot_gap), s_fa.val, s_fb.val, s_delay.val) for r in
                     r_axis]
         new_data2 = [block_frequency(1.0 - r, s_gamma.val, round(new_slot_gap), s_fa.val, s_fb.val, 0) for r in r_axis]
-        new_density = pdf(delta_axis, 1.0, s_gamma.val, round(new_slot_gap), s_fa.val, s_fb.val, s_delay.val)
+        new_density, new_pi = pdf(delta_axis, 1.0, s_gamma.val, round(new_slot_gap), s_fa.val, s_fb.val, s_delay.val)
         line0.set_ydata(new_density)
+        line00.set_ydata(new_pi)
+        line000.set_ydata([f(i, s_gamma.val, round(new_slot_gap), s_fa.val, s_fb.val) for i in delta_axis])
         line1.set_ydata(new_data)
         line2.set_ydata(new_data2)
         line3.set_ydata([0.0, max(new_data)])
@@ -810,6 +972,7 @@ if __name__ == '__main__':
         line6.set_data([1.0 - new_inter_x, 1.0 - new_inter_x], [np.nanmin(prob_settlement), np.nanmax(prob_settlement)])
         ax[0].relim()
         ax[0].autoscale_view()
+        ax[0].set_ylim([0, max(np.amax(new_density), np.amax(new_pi))])
         ax[1].relim()
         ax[1].autoscale_view()
         ax[2].relim()
@@ -821,8 +984,10 @@ if __name__ == '__main__':
     def update_fa(new_fa):
         new_data = [block_frequency(r, s_gamma.val, s_slot_gap.val, new_fa, s_fb.val, s_delay.val) for r in r_axis]
         new_data2 = [block_frequency(1.0 - r, s_gamma.val, s_slot_gap.val, new_fa, s_fb.val, 0) for r in r_axis]
-        new_density = pdf(delta_axis, 1.0, s_gamma.val, s_slot_gap.val, new_fa, s_fb.val, s_delay.val)
+        new_density, new_pi = pdf(delta_axis, 1.0, s_gamma.val, s_slot_gap.val, new_fa, s_fb.val, s_delay.val)
         line0.set_ydata(new_density)
+        line00.set_ydata(new_pi)
+        line000.set_ydata([f(i, s_gamma.val,  s_slot_gap.val, new_fa, s_fb.val) for i in delta_axis])
         line1.set_ydata(new_data)
         line2.set_ydata(new_data2)
         line3.set_ydata([0.0, max(new_data)])
@@ -836,6 +1001,7 @@ if __name__ == '__main__':
         line6.set_data([1.0 - new_inter_x, 1.0 - new_inter_x], [np.nanmin(prob_settlement), np.nanmax(prob_settlement)])
         ax[0].relim()
         ax[0].autoscale_view()
+        ax[0].set_ylim([0, max(np.amax(new_density), np.amax(new_pi))])
         ax[1].relim()
         ax[1].autoscale_view()
         ax[2].relim()
@@ -847,8 +1013,10 @@ if __name__ == '__main__':
     def update_fb(new_fb):
         new_data = [block_frequency(r, s_gamma.val, s_slot_gap.val, s_fa.val, new_fb, s_delay.val) for r in r_axis]
         new_data2 = [block_frequency(1.0 - r, s_gamma.val, s_slot_gap.val, s_fa.val, new_fb, 0) for r in r_axis]
-        new_density = pdf(delta_axis, 1.0, s_gamma.val, s_slot_gap.val, s_fa.val, new_fb, s_delay.val)
+        new_density, new_pi = pdf(delta_axis, 1.0, s_gamma.val, s_slot_gap.val, s_fa.val, new_fb, s_delay.val)
         line0.set_ydata(new_density)
+        line00.set_ydata(new_pi)
+        line000.set_ydata([f(i, s_gamma.val,  s_slot_gap.val, s_fa.val, new_fb) for i in delta_axis])
         line1.set_ydata(new_data)
         line2.set_ydata(new_data2)
         line3.set_ydata([0.0, max(new_data)])
@@ -862,6 +1030,7 @@ if __name__ == '__main__':
         line6.set_data([1.0 - new_inter_x, 1.0 - new_inter_x], [np.nanmin(prob_settlement), np.nanmax(prob_settlement)])
         ax[0].relim()
         ax[0].autoscale_view()
+        ax[0].set_ylim([0, max(np.amax(new_density), np.amax(new_pi))])
         ax[1].relim()
         ax[1].autoscale_view()
         ax[2].relim()
@@ -874,8 +1043,9 @@ if __name__ == '__main__':
         new_data = [block_frequency(r, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, round(new_delay)) for r in
                     r_axis]
         new_data2 = [block_frequency(1.0 - r, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, 0) for r in r_axis]
-        new_density = pdf(delta_axis, 1.0, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, round(new_delay))
+        new_density, new_pi = pdf(delta_axis, 1.0, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, round(new_delay))
         line0.set_ydata(new_density)
+        line00.set_ydata(new_pi)
         line1.set_ydata(new_data)
         line2.set_ydata(new_data2)
         line3.set_ydata([0.0, max(new_data)])
@@ -889,6 +1059,7 @@ if __name__ == '__main__':
         line6.set_data([1.0 - new_inter_x, 1.0 - new_inter_x], [np.nanmin(prob_settlement), np.nanmax(prob_settlement)])
         ax[0].relim()
         ax[0].autoscale_view()
+        ax[0].set_ylim([0, max(np.amax(new_density), np.amax(new_pi))])
         ax[1].relim()
         ax[1].autoscale_view()
         ax[2].relim()
@@ -901,8 +1072,9 @@ if __name__ == '__main__':
         new_data = [block_frequency(r, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val) for r in r_axis]
         new_data2 = [block_frequency(1.0 - r, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, 0) for r in r_axis]
         new_data3 = mp_grinding_frequency(r_axis, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val)
-        new_density = pdf(delta_axis, 1.0, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val)
+        new_density, new_pi = pdf(delta_axis, 1.0, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val)
         line0.set_ydata(new_density)
+        line00.set_ydata(new_pi)
         line1.set_ydata(new_data)
         line2.set_ydata(new_data2)
         line3.set_ydata([0.0, max(new_data)])
@@ -911,12 +1083,13 @@ if __name__ == '__main__':
         global prob_settlement
         prob_settlement = settlement_argument(new_data2, new_data)
         line5.set_ydata(prob_settlement)
-        (new_inter_x, new_inter_y) = find_intersection(new_data2, new_data, r_axis)
+        (new_inter_x, new_inter_y) = find_intersection(new_data3, new_data, r_axis)
         dot.set_xdata(new_inter_x)
         dot.set_ydata(new_inter_y)
         line6.set_data([1.0 - new_inter_x, 1.0 - new_inter_x], [np.nanmin(prob_settlement), np.nanmax(prob_settlement)])
         ax[0].relim()
         ax[0].autoscale_view()
+        ax[0].set_ylim([0, max(np.amax(new_density), np.amax(new_pi))])
         ax[1].relim()
         ax[1].autoscale_view()
         ax[2].relim()
@@ -925,7 +1098,9 @@ if __name__ == '__main__':
         update_consistency(np.asarray(new_data3))
         fig.suptitle("Consistency Bound = " + "{:.2f}".format(1.0 - new_inter_x))
 
-
+    if plot_data:
+        plot_data_points()
+    ax[0].legend()
     update_cont(radio_var)
     s_gamma.on_changed(update_gamma)
     s_slot_gap.on_changed(update_slot_gap)
