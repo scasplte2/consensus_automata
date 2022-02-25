@@ -26,7 +26,7 @@ branch_depth = 2
 # Grid resolution for 3d surface plot
 nx, ny = (10, 10)
 # Number of data points for consistency contour
-n_cons_plt = 100
+n_cons_plt = gamma_max
 # Target chain growth for heatmap series over varying gamma and fa
 target_f_eff = 0.075
 
@@ -43,7 +43,7 @@ stake_scale = 1.0
 init_stake = 1.0
 
 plot_data = False
-dataFileName = "test.txt"
+dataFileName = "data.txt"
 
 
 # Initial delay value \Delta in semi-synchronous delay model
@@ -65,9 +65,11 @@ delta_axis = np.arange(0, gamma_max + 1)
 r_axis = np.linspace(0.0, 1.0, 20)
 
 # User defined curve TODO add txt file input
+l = 15
 # difficulty_curve = np.sqrt(delta_axis)*0.01
 # difficulty_curve = delta_axis*delta_axis*0.0005
-difficulty_curve = (signal.sawtooth(2 * np.pi * 0.2 * delta_axis) + 1.0) / 2.0
+# difficulty_curve = (signal.sawtooth(2 * np.pi * 0.1 * delta_axis) + 1.0) / 2.0
+difficulty_curve = np.mod(delta_axis, l)/float(l-1)
 
 # Settlement depth for plotting
 k_settle = 10
