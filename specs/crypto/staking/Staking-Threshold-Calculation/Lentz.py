@@ -49,12 +49,7 @@ def rational_approximation(arg: Fraction, max_denominator: int, max_iter: int):
     return Fraction(q * output.denominator + output.numerator, output.denominator)
 
 
-def modified_lentz_method(
-        max_iter: int,
-        prec: int,
-        a,
-        b
-):
+def modified_lentz_method(max_iter: int, prec: int, a, b):
     big_factor = pow(10, prec + 10)
     tiny_factor = Fraction(1, big_factor)
     truncation_error = Fraction(1, pow(10, prec + 1))
@@ -150,13 +145,14 @@ def regression(prec: int, stake: int, net_stake: int, coefficient: Fraction):
 
 
 
-fig = plt.figure()
-ax = fig.add_subplot(projection='3d')
 label_bool = True
 plot_reg1 = False
-plot_reg2 = True
+plot_reg2 = False
+plot_reg3 = True
 
 if plot_reg1:
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
     precision = 38
     k_max = 500
     i_max = 10
@@ -189,6 +185,8 @@ if plot_reg1:
 
 
 if plot_reg2:
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
     f = Fraction(99, 100)
     k_max = 500
     i_max = 40
@@ -216,5 +214,38 @@ if plot_reg2:
     plt.legend()
     ax.set_xlabel("Relative Stake")
     ax.set_ylabel("Precision")
+    plt.title("Exp operation experiment, f = "+f.__str__())
+    plt.show()
+
+
+if plot_reg3:
+    fig = plt.figure()
+    ax = fig.add_subplot()
+    f = Fraction(99, 100)
+    k_max = 500
+    i_max = 38
+    for i in range(i_max, i_max+1):
+        data = np.empty((0, 4))
+        for stake in range(5, 51, 5):
+            start_time = time.time()
+            thr_len = []
+            coefficient = Fraction(math.log1p(f.numerator/f.denominator))
+            # coefficient = log1p(Fraction(-i, i_max), 10000, 15)
+            for k in range(k_max):
+                thr = regression(i, stake * pow(10, i) // 100 - k_max + k, pow(10, i), coefficient)
+                thr_len.append(byte_length(thr.numerator) + byte_length(thr.denominator))
+            exec_time = (time.time() - start_time)
+            print(str(stake * pow(10, i) // 100 / pow(10, i)) + " " + str(sum(thr_len) / len(thr_len)) + " " + str(i) + " " + "%s" % exec_time)
+            new_data = np.array([float(stake * pow(10, i) // 100 / pow(10, i)), f.numerator/f.denominator, sum(thr_len) / len(thr_len), float(exec_time)])
+            data = np.vstack((data, new_data))
+        if label_bool:
+            label_bool = False
+            ax.scatter(data[:, 0], data[:, 3], color="blue", label="Execution time of " + str(k_max) + " exp operations in seconds")
+            ax.scatter(data[:, 0], data[:, 2] / 1000, color="red", label="Avg. byte length of threshold divided by 1000")
+        else:
+            ax.scatter(data[:, 0], data[:, 3], color="blue")
+            ax.scatter(data[:, 0], data[:, 2] / 1000, color="red")
+    plt.legend()
+    ax.set_xlabel("Relative Stake")
     plt.title("Exp operation experiment, f = "+f.__str__())
     plt.show()
