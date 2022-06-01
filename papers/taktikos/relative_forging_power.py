@@ -31,7 +31,7 @@ n_cons_plt = gamma_max
 target_f_eff = 0.075
 
 # Initial Snowplow curve params
-gamma_init = 15
+gamma_init = 50
 fa_init = 0.5
 fb_init = 0.05
 slot_gap_init = 0
@@ -43,7 +43,7 @@ stake_scale = 1.0
 init_stake = 1.0
 
 plot_data = False
-dataFileName = "data.txt"
+dataFileName = "test_threshold.txt"
 
 
 # Initial delay value \Delta in semi-synchronous delay model
@@ -65,7 +65,7 @@ delta_axis = np.arange(0, gamma_max + 1)
 r_axis = np.linspace(0.0, 1.0, 20)
 
 # User defined curve TODO add txt file input
-l = 15
+l = 10
 # difficulty_curve = np.sqrt(delta_axis)*0.01
 # difficulty_curve = delta_axis*delta_axis*0.0005
 # difficulty_curve = (signal.sawtooth(2 * np.pi * 0.1 * delta_axis) + 1.0) / 2.0
@@ -156,8 +156,8 @@ class MyRadioButtons(RadioButtons):
         self.circles = self.box.legendHandles
         for c in self.circles:
             c.set_picker(5)
-        self.cnt = 0
-        self.observers = {}
+        # self.cnt = 0
+        # self.observers = {}
 
         self.connect_event('pick_event', self._clicked)
 
@@ -591,7 +591,7 @@ if __name__ == '__main__':
     line00, = ax[0].plot(delta_axis, init_pi, label="Stationary Distribution")
     line000, = ax[0].plot(delta_axis, [f(i, gamma_init, slot_gap_init, fa_init, fb_init) for i in delta_axis], 'g:', label="Difficulty Curve")
     ax[0].set_ylim([0, max(np.amax(init_density), np.amax(init_pi))])
-    ax[0].set(xlabel="Slot Interval")
+    ax[0].set(xlabel="Slot Interval $\delta$")
     ax[0].set(ylabel="Number Density")
 
     h_init_data = [block_frequency(r, gamma_init, slot_gap_init, fa_init, fb_init, delay_init) for r in r_axis]
@@ -621,19 +621,19 @@ if __name__ == '__main__':
     lim_4 = 0.035
 
     ax_gamma = plt.axes([lim_1, lim_2[0], lim_3, lim_4])
-    s_gamma = Slider(ax_gamma, 'gamma', 0, gamma_max, valinit=gamma_init, valfmt="%i")
+    s_gamma = Slider(ax_gamma, '$\gamma$', 0, gamma_max, valinit=gamma_init, valfmt="%i")
 
     ax_slot_gap = plt.axes([lim_1, lim_2[1], lim_3, lim_4])
-    s_slot_gap = Slider(ax_slot_gap, 'slot gap', 0, gamma_max, valinit=slot_gap_init, valfmt="%i")
+    s_slot_gap = Slider(ax_slot_gap, '$\psi$', 0, gamma_max, valinit=slot_gap_init, valfmt="%i")
 
     ax_delay = plt.axes([lim_1, lim_2[2], lim_3, lim_4])
-    s_delay = Slider(ax_delay, 'delay', 0, gamma_max, valinit=delay_init, valfmt="%i")
+    s_delay = Slider(ax_delay, '$\Delta$', 0, gamma_max, valinit=delay_init, valfmt="%i")
 
     ax_fa = plt.axes([lim_1, lim_2[3], lim_3, lim_4])
-    s_fa = Slider(ax_fa, 'fA', 0.0, 1.0, valinit=fa_init)
+    s_fa = Slider(ax_fa, '$f_A$', 0.0, 1.0, valinit=fa_init)
 
     ax_fb = plt.axes([lim_1, lim_2[4], lim_3, lim_4])
-    s_fb = Slider(ax_fb, 'fB', 0.001, 0.99, valinit=fb_init)
+    s_fb = Slider(ax_fb, '$f_B$', 0.001, 0.99, valinit=fb_init)
 
     ax_grind_button = plt.axes([lim_1, lim_2[5], lim_3, lim_4])
     b_grind = Button(ax_grind_button, 'Calculate Grinding Frequency')
@@ -1111,7 +1111,7 @@ if __name__ == '__main__':
     s_delay.on_changed(update_delay)
     b_grind.on_clicked(update_grind)
     b_plot_consist.on_clicked(plot_consistency_heatmap)
-    radio.on_clicked(update_cont)
+    # radio.on_clicked(update_cont)
 
 
 plt.show()
