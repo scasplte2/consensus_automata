@@ -12,7 +12,7 @@ total_slots = 100000
 # Slots
 slots = np.arange(total_slots)
 # Forging window
-gamma = 0
+gamma = 15
 # Slot gap
 slot_gap = 0
 # Snowplow amplitude
@@ -119,10 +119,11 @@ def grinding_sim(num_challenger, num_adversary):
     j = 0
     jj = 0
     fork_intervals = []
+    deltas_h = []
     # Main for loop over all slots
     # for slot in slots:
     slot = 0
-    # while len(fork_intervals) < 1000:
+    # while len(fork_intervals) < 100:
     while slot < total_slots:
         # Accumulate new branches
         new_branches = []
@@ -137,6 +138,7 @@ def grinding_sim(num_challenger, num_adversary):
         for challenger in honest:
             # If this branch satisfies vrf test new child branches are created at the next height with reserve 0
             if challenger.test(slot, honest_branch[0]):
+                deltas_h.append(slot-honest_branch[0])
                 new_branches.append([slot, honest_branch[1] + 1, 0, 0])
         for branch in branches:
             for challenger in adversary:
@@ -236,7 +238,7 @@ def grinding_sim(num_challenger, num_adversary):
         + ("\nFinal number of branches: " + str(num_b)) \
         + "\n[Parent slot, block number, reserve, margin]:\n" + str(branches)
     print(hud)
-    return [max_l, avg_settle, forks/total_slots, avg_margin], fork_intervals
+    return [max_l, avg_settle, forks/total_slots, avg_margin], fork_intervals, deltas_h
 
 
 if __name__ == '__main__':
@@ -252,30 +254,33 @@ if __name__ == '__main__':
 
     # pool = mp.Pool(mp.cpu_count())
 
-    outfile = open('test.npy', 'wb')
+    # outfile = open('test.npy', 'wb')
 
     for k in data_points:
         print(k)
-        data, data_forks = grinding_sim(100, k)
+        data, data_forks, deltas_h = grinding_sim(100, k)
         chg_data.append(data[0]/total_slots)
         avg_data.append(np.asarray(data_forks))
         frk_data.append(data[2])
         mrg_data.append(data[3])
         adv_axis.append(k/100)
-        np.save(outfile, np.asarray(data_forks))
+        plt.hist(deltas_h, 40, (0, 40), density=True)
+        plt.show()
+
+        # np.save(outfile, np.asarray(data_forks))
     plt.figure()
     plt.plot(adv_axis, frk_data)
     plt.xlabel("Adversary fraction")
     plt.ylabel("Proportion of time in a forked state")
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    nbins = 20
+    nbins = 50
     for ys, z in zip(avg_data, adv_axis):
-        hist, bins = np.histogram(ys, bins=nbins, density=True, range=(0, nbins))
+        hist, bins = np.histogram(ys, bins=nbins, range=(0, 10), density=True)
         xs = (bins[:-1] + bins[1:])/2
 
         ax.bar(xs, hist, zs=z, zdir='y', alpha=0.8)
-    ax.axes.set_xlim3d(left=0.0, right=nbins)
+    ax.axes.set_xlim3d(left=0.0, right=10)
     ax.set_xlabel('Fork length')
     ax.set_ylabel('Adversary fraction')
     ax.set_zlabel('Number of forks')

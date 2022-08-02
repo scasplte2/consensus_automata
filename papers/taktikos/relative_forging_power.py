@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import matplotlib
 import numpy as np
 from matplotlib.widgets import Slider
 from matplotlib.widgets import Button
@@ -12,11 +13,11 @@ from collections import defaultdict
 # Maximum value of gamma to be plotted
 gamma_max = 100
 # Truncation error in distribution summation as slot-interval diverges
-trunc_error = 1.0e-7
+trunc_error = 1.0e-6
 #  Max number of iterations for convergent series
 max_iter = 10000
 # Number of nonces that the grinding simulation runs over
-total_slots = 300000
+total_slots = 10000
 # Slot axis for grinding simulation
 slots = np.arange(total_slots)
 # Nonces for grinding simulation
@@ -31,7 +32,7 @@ n_cons_plt = gamma_max
 target_f_eff = 0.075
 
 # Initial Snowplow curve params
-gamma_init = 50
+gamma_init = 15
 fa_init = 0.5
 fb_init = 0.05
 slot_gap_init = 0
@@ -246,68 +247,261 @@ def grinding_frequency(arg):
 
 
 # Parallelized grinding simulation
-def mp_grinding_frequency(r_range, gamma, slot_gap, fa, fb):
+def mp_grinding_frequency(bd, r_range, gamma, slot_gap, fa, fb):
     pool = mp.Pool(mp.cpu_count())
-    output = pool.map(grinding_frequency, [(branch_depth, 1.0 - arg, gamma, slot_gap, fa, fb) for arg in r_range])
+    output = pool.map(grinding_frequency, [(bd, r, gamma, slot_gap, fa, fb) for r in r_range])
     pool.close()
     return output
 
 
-if __name__ == '__main__':
+def line_intersection(l1, l2):
+    x_diff = (l1[0][0] - l1[1][0], l2[0][0] - l2[1][0])
+    y_diff = (l1[0][1] - l1[1][1], l2[0][1] - l2[1][1])
 
-    def line_intersection(l1, l2):
-        x_diff = (l1[0][0] - l1[1][0], l2[0][0] - l2[1][0])
-        y_diff = (l1[0][1] - l1[1][1], l2[0][1] - l2[1][1])
+    def det(a, b):
+        return a[0] * b[1] - a[1] * b[0]
 
-        def det(a, b):
-            return a[0] * b[1] - a[1] * b[0]
+    div = det(x_diff, y_diff)
+    if div == 0:
+        raise ZeroDivisionError
 
-        div = det(x_diff, y_diff)
-        if div == 0:
-            raise ZeroDivisionError
-
-        d = (det(*l1), det(*l2))
-        x = det(d, x_diff) / div
-        y = det(d, y_diff) / div
-        return x, y
+    d = (det(*l1), det(*l2))
+    x = det(d, x_diff) / div
+    y = det(d, y_diff) / div
+    return x, y
 
 
-    def find_intersection(curve1, curve2, x_axis):
-        i = 0
-        if curve1[0] - curve2[0] == 0.0:
-            return x_axis[0], 0.0
-        sign = (curve1[0] - curve2[0]) / abs(curve1[0] - curve2[0])
-        for (c1, c2) in zip(curve1, curve2):
-            if sign > 0.0 and c1 - c2 > 0.0 or sign < 0.0 and c1 - c2 < 0.0:
-                i = i + 1
+def find_intersection(curve1, curve2, x_axis):
+    i = 0
+    if curve1[0] - curve2[0] == 0.0:
+        return x_axis[0], 0.0
+    sign = (curve1[0] - curve2[0]) / abs(curve1[0] - curve2[0])
+    for (c1, c2) in zip(curve1, curve2):
+        if sign > 0.0 and c1 - c2 > 0.0 or sign < 0.0 and c1 - c2 < 0.0:
+            i = i + 1
+        else:
+            if i + 1 < len(x_axis):
+                return line_intersection(([x_axis[i], curve1[i]], [x_axis[i + 1], curve1[i + 1]]),
+                                         ([x_axis[i], curve2[i]], [x_axis[i + 1], curve2[i + 1]]))
             else:
-                if i + 1 < len(x_axis):
-                    return line_intersection(([x_axis[i], curve1[i]], [x_axis[i + 1], curve1[i + 1]]),
-                                             ([x_axis[i], curve2[i]], [x_axis[i + 1], curve2[i + 1]]))
+                # return x_axis[len(x_axis)-1], 0.0
+                return line_intersection(([x_axis[i - 1], curve1[i - 1]], [x_axis[i], curve1[i]]),
+                                         ([x_axis[i - 1], curve2[i - 1]], [x_axis[i], curve2[i]]))
+
+
+# Numerical routines for calculation of the Probability Density Function (PDF)
+
+
+def pdf_acc(d, r, gamma, slot_gap, fa, fb, delay, acc):
+    if use_pow_test:
+        return pdf_acc_pow(d, r, fb, delay, acc)
+    else:
+        return pdf_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc)
+
+
+def pi_acc(d, r, gamma, slot_gap, fa, fb, delay, acc):
+    if use_pow_test:
+        return pi_acc_pow(d, r, fb, delay, acc)
+    else:
+        return pi_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc)
+
+
+def pdf_old(d_axis, r, gamma, slot_gap, fa, fb, delay):
+    i = 0
+    done = False
+    old_value = 0.0
+    accumulation = 1.0
+    pdf_a = []
+    while not done:
+        (nd, accumulation) = pdf_acc(i, r, gamma, slot_gap, fa, fb, delay, accumulation)
+        if i == max_iter:
+            print("Warning: distribution did not converge", nd, accumulation)
+        if trunc_error > nd > 0.0 and old_value > 0.0 or accumulation == 0.0 or i == max_iter:
+            done = True
+        else:
+            pdf_a.append(nd)
+            old_value = nd
+            i = i + 1
+
+    norm = sum(pdf_a)
+    pdf_a = np.asarray(pdf_a) / norm
+    return np.pad(pdf_a[:len(d_axis)], [(0, max(len(d_axis)-len(pdf_a), 0))], mode='constant')
+
+def pdf(d_axis, r, gamma, slot_gap, fa, fb, delay):
+    i = 0
+    done = False
+    accumulation = 1.0
+    pi = []
+    pdf_ext = []
+    while not done:
+        accumulation = pi_acc(i, r, gamma, slot_gap, fa, fb, delay, accumulation)
+        if i == max_iter:
+            print("Warning: distribution did not converge", accumulation)
+        if trunc_error > accumulation >= 0.0 or i == max_iter:
+            done = True
+        else:
+            pi.append(accumulation)
+            i = i + 1
+    d = -1
+    norm = sum(pi)
+    if norm == 0.0:
+        print("Warning: stationary distribution summed to zero")
+    else:
+        pi = np.asarray(pi) / norm
+    for p in pi:
+        d = d + 1
+        if d > delay:
+            pdf_ext.append(p*forge_power(r, d, gamma, slot_gap, fa, fb))
+        else:
+            pdf_ext.append(0.0)
+    norm2 = sum(pdf_ext)
+    pdf_ext = np.asarray(pdf_ext) / norm2
+    return np.pad(pdf_ext[:len(d_axis)], [(0, max(len(d_axis)-len(pdf_ext), 0))], mode='constant'), np.pad(pi[:len(d_axis)], [(0, max(len(d_axis)-len(pi), 0))], mode='constant')
+
+
+def pdf_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc):
+    if d == 1:
+        if d > delay:
+            b = max(1.0 - f(d, gamma, slot_gap, fa, fb), 0.0)
+            if b == 0.0:
+                return 0.0, acc
+            else:
+                return 1.0 - np.power(b, stake_scale*r), acc
+        else:
+            return 0.0, acc
+    else:
+        if d > delay:
+            b1 = max(1.0 - f(d - 1, gamma, slot_gap, fa, fb), 0.0)
+            b2 = max(1.0 - f(d, gamma, slot_gap, fa, fb), 0.0)
+            if b1 == 0.0:
+                acc2 = np.power(b1, stake_scale*r) * acc
+                return (1.0 - np.power(b2, stake_scale*r)) * acc2, acc2
+            else:
+                acc2 = np.power(b1, stake_scale*r) * acc
+                if b2 == 0.0:
+                    return acc, 0.0
                 else:
-                    # return x_axis[len(x_axis)-1], 0.0
-                    return line_intersection(([x_axis[i - 1], curve1[i - 1]], [x_axis[i], curve1[i]]),
-                                             ([x_axis[i - 1], curve2[i - 1]], [x_axis[i], curve2[i]]))
-
-
-    # Numerical routines for calculation of the Probability Density Function (PDF)
-
-
-    def pdf_acc(d, r, gamma, slot_gap, fa, fb, delay, acc):
-        if use_pow_test:
-            return pdf_acc_pow(d, r, fb, delay, acc)
+                    return (1.0 - np.power(b2, stake_scale*r)) * acc2, acc2
         else:
-            return pdf_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc)
+            return 0.0, acc
 
 
-    def pi_acc(d, r, gamma, slot_gap, fa, fb, delay, acc):
-        if use_pow_test:
-            return pi_acc_pow(d, r, fb, delay, acc)
+def pdf_acc_pow(d, r, fb, delay, acc):
+    if d == 1:
+        if d > delay:
+            return fb * r, 1.0
         else:
-            return pi_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc)
+            return 0.0, 1.0
+    else:
+        if d > delay:
+            out2 = (1.0 - fb * r) * acc
+            out1 = fb * r * out2
+            return out1, out2
+        else:
+            return 0.0, acc
 
 
-    def pdf_old(d_axis, r, gamma, slot_gap, fa, fb, delay):
+def pi_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc):
+    if d == 1:
+        return 1.0
+    else:
+        if d > delay + 1:
+            b1 = max(1.0 - f(d - 1, gamma, slot_gap, fa, fb), 0.0)
+            return np.power(b1, stake_scale*r) * acc
+        else:
+            return acc
+
+
+def pi_acc_pow(d, r, fb, delay, acc):
+    if d == 1:
+        return 1.0
+    else:
+        if d > delay + 1:
+            return (1.0 - fb * r) * acc
+        else:
+            return acc
+
+# Block frequency functions
+
+
+def block_frequency(r, gamma, slot_gap, fa, fb, delay):
+    if numerical_method == "trunc":
+        return block_frequency_trunc(r, gamma, slot_gap, fa, fb, delay)
+    if numerical_method == "pi":
+        return block_frequency_pi(r, gamma, slot_gap, fa, fb, delay)
+    if numerical_method == "tail":
+        return block_frequency_tail(r, gamma, slot_gap, fa, fb, delay)
+    if numerical_method == "pi norm":
+        return block_frequency_trunc_pi_norm(r, gamma, slot_gap, fa, fb, delay)
+    return 0.0
+
+
+def block_frequency_pi(r, gamma, slot_gap, fa, fb, delay):
+    if r > 0.0:
+        ns = max(gamma, slot_gap, delay) + 1
+        pi = np.empty([ns])
+        pbar = np.empty([ns])
+        prev = 1.0
+        for i in range(ns):
+            new = np.power(1.0 - f(i + 1, gamma, slot_gap, fa, fb), r) * prev
+            pbar[i] = new
+            prev = new
+
+        c1 = 1.0 + sum(pbar[:ns - 3]) + pbar[ns - 2] / (
+                1.0 - np.power(1.0 - f(gamma + 1, gamma, slot_gap, fa, fb), r))
+        cgp1 = (1.0 - np.power(1.0 - f(gamma + 1, gamma, slot_gap, fa, fb), r)) * (1.0 + sum(pbar[:ns - 2])) + pbar[
+            ns - 1]
+        for i in range(ns):
+            if i == gamma:
+                pi[i] = pbar[i] / cgp1
+            else:
+                pi[i] = pbar[i] / c1
+        print(c1, cgp1)
+        print(pi, r, gamma, slot_gap, fa, fb, delay)
+        if not 0.98 < sum(pi) < 1.02:
+            print(sum(pi))
+            quit()
+        res = 0.0
+        for i in range(ns):
+            if i == ns - 1:
+                res = res  # + pi[i] * (gamma + 1.0 + 1.0/(r*np.log(1-fb)))
+            else:
+                res = res + (1.0 - np.power(max(1.0 - f(i + 1, gamma, slot_gap, fa, fb), 0.0), r)) * pi[i] * (i + 1)
+        return 1.0 / res
+    else:
+        return 0.0
+
+
+def block_frequency_tail(r, gamma, slot_gap, fa, fb, delay):
+    if r > 0.0:
+        block_time = 0.0
+        accumulation = 1.0
+        ns = int(max(gamma, slot_gap, delay) + 1)
+        pdf_a = np.empty([ns])
+        for i in range(ns):
+            (nd, accumulation) = pdf_acc(i + 1, r, gamma, slot_gap, fa, fb, delay, accumulation)
+            pdf_a[i] = nd
+        norm = sum(pdf_a)
+        pdf_a = pdf_a / norm
+        i = 0
+        for nd in pdf_a:
+            i = i + 1
+            if i == ns:
+                block_time = block_time + (ns + 1.0 / (r * np.log(1.0 / (1.0 - fb))))
+            else:
+                block_time = block_time + i * nd
+
+        if block_time > 0.0:
+            return 1.0 / block_time
+        else:
+            return 0.0
+    else:
+        return 0.0
+
+
+def block_frequency_trunc(r, gamma, slot_gap, fa, fb, delay):
+    res = 0.0
+    if r > 0.0:
         i = 0
         done = False
         old_value = 0.0
@@ -323,12 +517,26 @@ if __name__ == '__main__':
                 pdf_a.append(nd)
                 old_value = nd
                 i = i + 1
-
+        d = 0
         norm = sum(pdf_a)
-        pdf_a = np.asarray(pdf_a) / norm
-        return np.pad(pdf_a[:len(d_axis)], [(0, max(len(d_axis)-len(pdf_a), 0))], mode='constant')
+        if norm == 0.0:
+            print("Warning: distribution summed to zero")
+        else:
+            pdf_a = np.asarray(pdf_a) / norm
+        for nd in pdf_a:
+            d = d + 1
+            res = res + d * nd
+        if res > 0.0:
+            return 1.0 / res
+        else:
+            return 0.0
+    else:
+        return 0.0
 
-    def pdf(d_axis, r, gamma, slot_gap, fa, fb, delay):
+
+def block_frequency_trunc_pi_norm(r, gamma, slot_gap, fa, fb, delay):
+    res = 0.0
+    if r > 0.0:
         i = 0
         done = False
         accumulation = 1.0
@@ -356,230 +564,26 @@ if __name__ == '__main__':
             else:
                 pdf_ext.append(0.0)
         norm2 = sum(pdf_ext)
-        pdf_ext = np.asarray(pdf_ext) / norm2
-        return np.pad(pdf_ext[:len(d_axis)], [(0, max(len(d_axis)-len(pdf_ext), 0))], mode='constant'), np.pad(pi[:len(d_axis)], [(0, max(len(d_axis)-len(pi), 0))], mode='constant')
-
-
-    def pdf_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc):
-        if d == 1:
-            if d > delay:
-                b = max(1.0 - f(d, gamma, slot_gap, fa, fb), 0.0)
-                if b == 0.0:
-                    return 0.0, acc
-                else:
-                    return 1.0 - np.power(b, stake_scale*r), acc
-            else:
-                return 0.0, acc
+        if norm2 == 0.0:
+            print("Warning: stationary distribution summed to zero")
         else:
-            if d > delay:
-                b1 = max(1.0 - f(d - 1, gamma, slot_gap, fa, fb), 0.0)
-                b2 = max(1.0 - f(d, gamma, slot_gap, fa, fb), 0.0)
-                if b1 == 0.0:
-                    acc2 = np.power(b1, stake_scale*r) * acc
-                    return (1.0 - np.power(b2, stake_scale*r)) * acc2, acc2
-                else:
-                    acc2 = np.power(b1, stake_scale*r) * acc
-                    if b2 == 0.0:
-                        return acc, 0.0
-                    else:
-                        return (1.0 - np.power(b2, stake_scale*r)) * acc2, acc2
-            else:
-                return 0.0, acc
-
-
-    def pdf_acc_pow(d, r, fb, delay, acc):
-        if d == 1:
-            if d > delay:
-                return fb * r, 1.0
-            else:
-                return 0.0, 1.0
-        else:
-            if d > delay:
-                out2 = (1.0 - fb * r) * acc
-                out1 = fb * r * out2
-                return out1, out2
-            else:
-                return 0.0, acc
-
-
-    def pi_acc_pos(d, r, gamma, slot_gap, fa, fb, delay, acc):
-        if d == 1:
-            return 1.0
-        else:
-            if d > delay + 1:
-                b1 = max(1.0 - f(d - 1, gamma, slot_gap, fa, fb), 0.0)
-                return np.power(b1, stake_scale*r) * acc
-            else:
-                return acc
-
-
-    def pi_acc_pow(d, r, fb, delay, acc):
-        if d == 1:
-            return 1.0
-        else:
-            if d > delay + 1:
-                return (1.0 - fb * r) * acc
-            else:
-                return acc
-
-    # Block frequency functions
-
-
-    def block_frequency(r, gamma, slot_gap, fa, fb, delay):
-        if numerical_method == "trunc":
-            return block_frequency_trunc(r, gamma, slot_gap, fa, fb, delay)
-        if numerical_method == "pi":
-            return block_frequency_pi(r, gamma, slot_gap, fa, fb, delay)
-        if numerical_method == "tail":
-            return block_frequency_tail(r, gamma, slot_gap, fa, fb, delay)
-        if numerical_method == "pi norm":
-            return block_frequency_trunc_pi_norm(r, gamma, slot_gap, fa, fb, delay)
-        return 0.0
-
-
-    def block_frequency_pi(r, gamma, slot_gap, fa, fb, delay):
-        if r > 0.0:
-            ns = max(gamma, slot_gap, delay) + 1
-            pi = np.empty([ns])
-            pbar = np.empty([ns])
-            prev = 1.0
-            for i in range(ns):
-                new = np.power(1.0 - f(i + 1, gamma, slot_gap, fa, fb), r) * prev
-                pbar[i] = new
-                prev = new
-
-            c1 = 1.0 + sum(pbar[:ns - 3]) + pbar[ns - 2] / (
-                    1.0 - np.power(1.0 - f(gamma + 1, gamma, slot_gap, fa, fb), r))
-            cgp1 = (1.0 - np.power(1.0 - f(gamma + 1, gamma, slot_gap, fa, fb), r)) * (1.0 + sum(pbar[:ns - 2])) + pbar[
-                ns - 1]
-            for i in range(ns):
-                if i == gamma:
-                    pi[i] = pbar[i] / cgp1
-                else:
-                    pi[i] = pbar[i] / c1
-            print(c1, cgp1)
-            print(pi, r, gamma, slot_gap, fa, fb, delay)
-            if not 0.98 < sum(pi) < 1.02:
-                print(sum(pi))
-                quit()
-            res = 0.0
-            for i in range(ns):
-                if i == ns - 1:
-                    res = res  # + pi[i] * (gamma + 1.0 + 1.0/(r*np.log(1-fb)))
-                else:
-                    res = res + (1.0 - np.power(max(1.0 - f(i + 1, gamma, slot_gap, fa, fb), 0.0), r)) * pi[i] * (i + 1)
+            pdf_ext = np.asarray(pdf_ext) / norm2
+        d = -1
+        for nd in pdf_ext:
+            d = d + 1
+            res = res + d * nd
+        if res > 0.0:
             return 1.0 / res
         else:
             return 0.0
+    else:
+        return 0.0
 
 
-    def block_frequency_tail(r, gamma, slot_gap, fa, fb, delay):
-        if r > 0.0:
-            block_time = 0.0
-            accumulation = 1.0
-            ns = int(max(gamma, slot_gap, delay) + 1)
-            pdf_a = np.empty([ns])
-            for i in range(ns):
-                (nd, accumulation) = pdf_acc(i + 1, r, gamma, slot_gap, fa, fb, delay, accumulation)
-                pdf_a[i] = nd
-            norm = sum(pdf_a)
-            pdf_a = pdf_a / norm
-            i = 0
-            for nd in pdf_a:
-                i = i + 1
-                if i == ns:
-                    block_time = block_time + (ns + 1.0 / (r * np.log(1.0 / (1.0 - fb))))
-                else:
-                    block_time = block_time + i * nd
-
-            if block_time > 0.0:
-                return 1.0 / block_time
-            else:
-                return 0.0
-        else:
-            return 0.0
 
 
-    def block_frequency_trunc(r, gamma, slot_gap, fa, fb, delay):
-        res = 0.0
-        if r > 0.0:
-            i = 0
-            done = False
-            old_value = 0.0
-            accumulation = 1.0
-            pdf_a = []
-            while not done:
-                (nd, accumulation) = pdf_acc(i, r, gamma, slot_gap, fa, fb, delay, accumulation)
-                if i == max_iter:
-                    print("Warning: distribution did not converge", nd, accumulation)
-                if trunc_error > nd > 0.0 and old_value > 0.0 or accumulation == 0.0 or i == max_iter:
-                    done = True
-                else:
-                    pdf_a.append(nd)
-                    old_value = nd
-                    i = i + 1
-            d = 0
-            norm = sum(pdf_a)
-            if norm == 0.0:
-                print("Warning: distribution summed to zero")
-            else:
-                pdf_a = np.asarray(pdf_a) / norm
-            for nd in pdf_a:
-                d = d + 1
-                res = res + d * nd
-            if res > 0.0:
-                return 1.0 / res
-            else:
-                return 0.0
-        else:
-            return 0.0
 
-
-    def block_frequency_trunc_pi_norm(r, gamma, slot_gap, fa, fb, delay):
-        res = 0.0
-        if r > 0.0:
-            i = 0
-            done = False
-            accumulation = 1.0
-            pi = []
-            pdf_ext = []
-            while not done:
-                accumulation = pi_acc(i, r, gamma, slot_gap, fa, fb, delay, accumulation)
-                if i == max_iter:
-                    print("Warning: distribution did not converge", accumulation)
-                if trunc_error > accumulation >= 0.0 or i == max_iter:
-                    done = True
-                else:
-                    pi.append(accumulation)
-                    i = i + 1
-            d = -1
-            norm = sum(pi)
-            if norm == 0.0:
-                print("Warning: stationary distribution summed to zero")
-            else:
-                pi = np.asarray(pi) / norm
-            for p in pi:
-                d = d + 1
-                if d > delay:
-                    pdf_ext.append(p*forge_power(r, d, gamma, slot_gap, fa, fb))
-                else:
-                    pdf_ext.append(0.0)
-            norm2 = sum(pdf_ext)
-            if norm2 == 0.0:
-                print("Warning: stationary distribution summed to zero")
-            else:
-                pdf_ext = np.asarray(pdf_ext) / norm2
-            d = -1
-            for nd in pdf_ext:
-                d = d + 1
-                res = res + d * nd
-            if res > 0.0:
-                return 1.0 / res
-            else:
-                return 0.0
-        else:
-            return 0.0
-
+if __name__ == '__main__':
 
     # Plots
 
@@ -590,9 +594,9 @@ if __name__ == '__main__':
     line0, = ax[0].plot(delta_axis, init_density, label="PDF of Honest Extensions")
     line00, = ax[0].plot(delta_axis, init_pi, label="Stationary Distribution")
     line000, = ax[0].plot(delta_axis, [f(i, gamma_init, slot_gap_init, fa_init, fb_init) for i in delta_axis], 'g:', label="Difficulty Curve")
-    ax[0].set_ylim([0, max(np.amax(init_density), np.amax(init_pi))])
+    # ax[0].set_ylim([0, max(np.amax(init_density), np.amax(init_pi))])
     ax[0].set(xlabel="Slot Interval $\delta$")
-    ax[0].set(ylabel="Number Density")
+    ax[0].set(ylabel="Probability Density")
 
     h_init_data = [block_frequency(r, gamma_init, slot_gap_init, fa_init, fb_init, delay_init) for r in r_axis]
     a_init_data = [block_frequency(1.0 - r, gamma_init, slot_gap_init, fa_init, fb_init, 0) for r in r_axis]
@@ -754,8 +758,9 @@ if __name__ == '__main__':
             s_gamma.set_val(gamma_axis[i])
             s_fa.set_val(fa)
             adv_data = np.empty(len(r_axis))
+            adv_r_axis = [1.0 - r for r in r_axis]
             if heatmap_grind:
-                adv_data = mp_grinding_frequency(r_axis, gamma_axis[i], s_slot_gap.val, fa, s_fb.val)
+                adv_data = mp_grinding_frequency(branch_depth, adv_r_axis, gamma_axis[i], s_slot_gap.val, fa, s_fb.val)
             else:
                 for (j, val) in zip(range(len(r_axis)), r_axis):
                     adv_data[j] = block_frequency(1.0 - val, gamma_axis[i], s_slot_gap.val, fa, s_fb.val, 0.0)
@@ -944,7 +949,7 @@ if __name__ == '__main__':
         line6.set_data([1.0 - new_inter_x, 1.0 - new_inter_x], [np.nanmin(prob_settlement), np.nanmax(prob_settlement)])
         ax[0].relim()
         ax[0].autoscale_view()
-        ax[0].set_ylim([0, max(np.amax(new_density), np.amax(new_pi))])
+        # ax[0].set_ylim([0, max(np.amax(new_density), np.amax(new_pi))])
         ax[1].relim()
         ax[1].autoscale_view()
         ax[2].relim()
@@ -974,7 +979,7 @@ if __name__ == '__main__':
         line6.set_data([1.0 - new_inter_x, 1.0 - new_inter_x], [np.nanmin(prob_settlement), np.nanmax(prob_settlement)])
         ax[0].relim()
         ax[0].autoscale_view()
-        ax[0].set_ylim([0, max(np.amax(new_density), np.amax(new_pi))])
+        # ax[0].set_ylim([0, max(np.amax(new_density), np.amax(new_pi))])
         ax[1].relim()
         ax[1].autoscale_view()
         ax[2].relim()
@@ -1003,7 +1008,7 @@ if __name__ == '__main__':
         line6.set_data([1.0 - new_inter_x, 1.0 - new_inter_x], [np.nanmin(prob_settlement), np.nanmax(prob_settlement)])
         ax[0].relim()
         ax[0].autoscale_view()
-        ax[0].set_ylim([0, max(np.amax(new_density), np.amax(new_pi))])
+        # ax[0].set_ylim([0, max(np.amax(new_density), np.amax(new_pi))])
         ax[1].relim()
         ax[1].autoscale_view()
         ax[2].relim()
@@ -1032,7 +1037,7 @@ if __name__ == '__main__':
         line6.set_data([1.0 - new_inter_x, 1.0 - new_inter_x], [np.nanmin(prob_settlement), np.nanmax(prob_settlement)])
         ax[0].relim()
         ax[0].autoscale_view()
-        ax[0].set_ylim([0, max(np.amax(new_density), np.amax(new_pi))])
+        # ax[0].set_ylim([0, max(np.amax(new_density), np.amax(new_pi))])
         ax[1].relim()
         ax[1].autoscale_view()
         ax[2].relim()
@@ -1061,7 +1066,7 @@ if __name__ == '__main__':
         line6.set_data([1.0 - new_inter_x, 1.0 - new_inter_x], [np.nanmin(prob_settlement), np.nanmax(prob_settlement)])
         ax[0].relim()
         ax[0].autoscale_view()
-        ax[0].set_ylim([0, max(np.amax(new_density), np.amax(new_pi))])
+        # ax[0].set_ylim([0, max(np.amax(new_density), np.amax(new_pi))])
         ax[1].relim()
         ax[1].autoscale_view()
         ax[2].relim()
@@ -1073,7 +1078,8 @@ if __name__ == '__main__':
     def update_grind(val):
         new_data = [block_frequency(r, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val) for r in r_axis]
         new_data2 = [block_frequency(1.0 - r, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, 0) for r in r_axis]
-        new_data3 = mp_grinding_frequency(r_axis, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val)
+        adv_r_axis = [1.0-r for r in r_axis]
+        new_data3 = mp_grinding_frequency(branch_depth, adv_r_axis, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val)
         new_density, new_pi = pdf(delta_axis, 1.0, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val)
         line0.set_ydata(new_density)
         line00.set_ydata(new_pi)
@@ -1091,7 +1097,7 @@ if __name__ == '__main__':
         line6.set_data([1.0 - new_inter_x, 1.0 - new_inter_x], [np.nanmin(prob_settlement), np.nanmax(prob_settlement)])
         ax[0].relim()
         ax[0].autoscale_view()
-        ax[0].set_ylim([0, max(np.amax(new_density), np.amax(new_pi))])
+        # ax[0].set_ylim([0, max(np.amax(new_density), np.amax(new_pi))])
         ax[1].relim()
         ax[1].autoscale_view()
         ax[2].relim()
