@@ -2,6 +2,8 @@ from relative_forging_power import *
 
 if __name__ == '__main__':
 
+    import csv
+
     num_trials = 30
 
     matplotlib.use("pgf")
@@ -124,3 +126,36 @@ if __name__ == '__main__':
     handles, labels = axx.get_legend_handles_labels()
     axx.legend(handles[::-1], labels[::-1])
     matplotlib.pyplot.savefig('grind_d_2_4_16_g_40.pgf')
+
+    with open("data_out_1.csv", "w+") as my_csv:
+        csvWriter = csv.writer(my_csv, delimiter=' ')
+        csvWriter.writerows(data_set_1)
+
+    with open("data_out_2.csv", "w+") as my_csv:
+        csvWriter = csv.writer(my_csv, delimiter=' ')
+        csvWriter.writerows(data_set_2)
+
+    with open("data_out_3.csv", "w+") as my_csv:
+        csvWriter = csv.writer(my_csv, delimiter=' ')
+        csvWriter.writerows(data_set_3)
+
+    with open("data_out_4.csv", "w+") as my_csv:
+        csvWriter = csv.writer(my_csv, delimiter=' ')
+        csvWriter.writerows(data_set_4)
+
+    with open("data_out_5.csv", "w+") as my_csv:
+        csvWriter = csv.writer(my_csv, delimiter=' ')
+        csvWriter.writerows(data_set_5)
+
+    with open("data_out_6.csv", "w+") as my_csv:
+        csvWriter = csv.writer(my_csv, delimiter=' ')
+        csvWriter.writerows(data_set_6)
+
+    with open("data_out_7.csv", "w+") as my_csv:
+        csvWriter = csv.writer(my_csv, delimiter=' ')
+        csvWriter.writerows(data_set_7)
+
+    with open("data_out_8.csv", "w+") as my_csv:
+        csvWriter = csv.writer(my_csv, delimiter=' ')
+        csvWriter.writerows(data_set_8)
+
