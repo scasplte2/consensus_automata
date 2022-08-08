@@ -17,7 +17,7 @@ trunc_error = 1.0e-6
 #  Max number of iterations for convergent series
 max_iter = 10000
 # Number of nonces that the grinding simulation runs over
-total_slots = 1000
+total_slots = 1000000
 # Slot axis for grinding simulation
 slots = np.arange(total_slots)
 # Nonces for grinding simulation
