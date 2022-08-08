@@ -24,8 +24,7 @@ if __name__ == '__main__':
     data_set_1 = []
     for i in range(num_trials):
         print(i)
-        data_set_1.append(mp_grinding_frequency(16, r_axis, 15, slot_gap_init, fa_init, fb_init))
-        ys = new_nonces()
+        data_set_1.append(mp_grinding_frequency(16, r_axis, 15, slot_gap_init, fa_init, fb_init, new_nonces()))
     trend_1 = np.array(data_set_1).mean(axis=0, dtype=np.float64)
     error_1 = np.array(data_set_1).std(axis=0, dtype=np.float64)
     axx.scatter(r_axis, trend_1, label="$\omega_g (d=16)$", marker="o", color="red")
@@ -35,8 +34,7 @@ if __name__ == '__main__':
     data_set_2 = []
     for i in range(num_trials):
         print(i)
-        data_set_2.append(mp_grinding_frequency(4, r_axis, 15, slot_gap_init, fa_init, fb_init))
-        ys = new_nonces()
+        data_set_2.append(mp_grinding_frequency(4, r_axis, 15, slot_gap_init, fa_init, fb_init, new_nonces()))
     trend_2 = np.array(data_set_2).mean(axis=0, dtype=np.float64)
     error_2 = np.array(data_set_2).std(axis=0, dtype=np.float64)
     axx.scatter(r_axis, trend_2, label="$\omega_g (d=4)$", marker="x", color="orange")
@@ -46,8 +44,7 @@ if __name__ == '__main__':
     data_set_3 = []
     for i in range(num_trials):
         print(i)
-        data_set_3.append(mp_grinding_frequency(2, r_axis, 15, slot_gap_init, fa_init, fb_init))
-        ys = new_nonces()
+        data_set_3.append(mp_grinding_frequency(2, r_axis, 15, slot_gap_init, fa_init, fb_init, new_nonces()))
     trend_3 = np.array(data_set_3).mean(axis=0, dtype=np.float64)
     error_3 = np.array(data_set_3).std(axis=0, dtype=np.float64)
     axx.scatter(r_axis, trend_3, label="$\omega_g (d=2)$", marker="+", color="yellow")
@@ -57,8 +54,7 @@ if __name__ == '__main__':
     data_set_4 = []
     for i in range(num_trials):
         print(i)
-        data_set_4.append(mp_grinding_frequency(1, r_axis, 15, slot_gap_init, fa_init, fb_init))
-        ys = new_nonces()
+        data_set_4.append(mp_grinding_frequency(1, r_axis, 15, slot_gap_init, fa_init, fb_init, new_nonces()))
     trend_4 = np.array(data_set_4).mean(axis=0, dtype=np.float64)
     error_4 = np.array(data_set_4).std(axis=0, dtype=np.float64)
     axx.scatter(r_axis, trend_4, label="$\omega_g (d=1)$", marker=".", color="blue")
@@ -80,8 +76,7 @@ if __name__ == '__main__':
     data_set_5 = []
     for i in range(num_trials):
         print(i)
-        data_set_5.append(mp_grinding_frequency(16, r_axis, 40, slot_gap_init, fa_init, fb_init))
-        ys = new_nonces()
+        data_set_5.append(mp_grinding_frequency(16, r_axis, 40, slot_gap_init, fa_init, fb_init, new_nonces()))
     trend_5 = np.array(data_set_5).mean(axis=0, dtype=np.float64)
     error_5 = np.array(data_set_5).std(axis=0, dtype=np.float64)
     axx.scatter(r_axis, trend_5, label="$\omega_g (d=16)$", marker="o", color="red")
@@ -91,8 +86,7 @@ if __name__ == '__main__':
     data_set_6 = []
     for i in range(num_trials):
         print(i)
-        data_set_6.append(mp_grinding_frequency(4, r_axis, 40, slot_gap_init, fa_init, fb_init))
-        ys = new_nonces()
+        data_set_6.append(mp_grinding_frequency(4, r_axis, 40, slot_gap_init, fa_init, fb_init, new_nonces()))
     trend_6 = np.array(data_set_6).mean(axis=0, dtype=np.float64)
     error_6 = np.array(data_set_6).std(axis=0, dtype=np.float64)
     axx.scatter(r_axis, trend_6, label="$\omega_g (d=4)$", marker="x", color="orange")
@@ -102,8 +96,7 @@ if __name__ == '__main__':
     data_set_7 = []
     for i in range(num_trials):
         print(i)
-        data_set_7.append(mp_grinding_frequency(2, r_axis, 40, slot_gap_init, fa_init, fb_init))
-        ys = new_nonces()
+        data_set_7.append(mp_grinding_frequency(2, r_axis, 40, slot_gap_init, fa_init, fb_init, new_nonces()))
     trend_7 = np.array(data_set_7).mean(axis=0, dtype=np.float64)
     error_7 = np.array(data_set_7).std(axis=0, dtype=np.float64)
     axx.scatter(r_axis, trend_7, label="$\omega_g (d=2)$", marker="+", color="yellow")
@@ -113,8 +106,7 @@ if __name__ == '__main__':
     data_set_8 = []
     for i in range(num_trials):
         print(i)
-        data_set_8.append(mp_grinding_frequency(1, r_axis, 40, slot_gap_init, fa_init, fb_init))
-        ys = new_nonces()
+        data_set_8.append(mp_grinding_frequency(1, r_axis, 40, slot_gap_init, fa_init, fb_init, new_nonces()))
     trend_8 = np.array(data_set_8).mean(axis=0, dtype=np.float64)
     error_8 = np.array(data_set_8).std(axis=0, dtype=np.float64)
     axx.scatter(r_axis, trend_8, label="$\omega_g (d=1)$", marker=".", color="blue")

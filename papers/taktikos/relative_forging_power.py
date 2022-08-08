@@ -17,7 +17,7 @@ trunc_error = 1.0e-6
 #  Max number of iterations for convergent series
 max_iter = 10000
 # Number of nonces that the grinding simulation runs over
-total_slots = 1000000
+total_slots = 1000
 # Slot axis for grinding simulation
 slots = np.arange(total_slots)
 # Nonces for grinding simulation
@@ -194,7 +194,7 @@ def forge_power(r, delta, gamma, slot_gap, fa, fb):
 
 # Grinding simulation at module level for multiprocessing
 def grinding_frequency(arg):
-    (bd, r, gamma, slot_gap, fa, fb) = arg
+    (bd, r, gamma, slot_gap, fa, fb, nonces) = arg
     if r == 0.0:
         return 0.0
 
@@ -213,7 +213,7 @@ def grinding_frequency(arg):
 
     # Maximally extend set of iid nonces with heuristic branching random walk
     # Each generation produces children with increasing block number
-    for y in ys:
+    for y in nonces:
         # Accumulate new branches
         new_branches = []
         for branch in branches:
@@ -247,9 +247,9 @@ def grinding_frequency(arg):
 
 
 # Parallelized grinding simulation
-def mp_grinding_frequency(bd, r_range, gamma, slot_gap, fa, fb):
+def mp_grinding_frequency(bd, r_range, gamma, slot_gap, fa, fb, nonces):
     pool = mp.Pool(mp.cpu_count())
-    output = pool.map(grinding_frequency, [(bd, r, gamma, slot_gap, fa, fb) for r in r_range])
+    output = pool.map(grinding_frequency, [(bd, r, gamma, slot_gap, fa, fb, nonces) for r in r_range])
     pool.close()
     return output
 
@@ -761,7 +761,7 @@ if __name__ == '__main__':
             adv_data = np.empty(len(r_axis))
             adv_r_axis = [1.0 - r for r in r_axis]
             if heatmap_grind:
-                adv_data = mp_grinding_frequency(branch_depth, adv_r_axis, gamma_axis[i], s_slot_gap.val, fa, s_fb.val)
+                adv_data = mp_grinding_frequency(branch_depth, adv_r_axis, gamma_axis[i], s_slot_gap.val, fa, s_fb.val, ys)
             else:
                 for (j, val) in zip(range(len(r_axis)), r_axis):
                     adv_data[j] = block_frequency(1.0 - val, gamma_axis[i], s_slot_gap.val, fa, s_fb.val, 0.0)
@@ -1080,7 +1080,7 @@ if __name__ == '__main__':
         new_data = [block_frequency(r, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val) for r in r_axis]
         new_data2 = [block_frequency(1.0 - r, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, 0) for r in r_axis]
         adv_r_axis = [1.0-r for r in r_axis]
-        new_data3 = mp_grinding_frequency(branch_depth, adv_r_axis, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val)
+        new_data3 = mp_grinding_frequency(branch_depth, adv_r_axis, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, ys)
         new_density, new_pi = pdf(delta_axis, 1.0, s_gamma.val, s_slot_gap.val, s_fa.val, s_fb.val, s_delay.val)
         line0.set_ydata(new_density)
         line00.set_ydata(new_pi)
