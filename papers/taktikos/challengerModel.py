@@ -2,17 +2,18 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import multiprocessing as mp
+import matplotlib
 
 # Set seed for reproducibility
 seed = 1
 np.random.seed(seed)
 
 # Number of Slots
-total_slots = 100000
+total_slots = 1000000
 # Slots
 slots = np.arange(total_slots)
 # Forging window
-gamma = 0
+gamma = 15
 # Slot gap
 slot_gap = 0
 # Snowplow amplitude
@@ -100,8 +101,8 @@ def select_branch(branches):
 
 # Simulation with heuristic branching random walk
 # Each generation produces children with increasing block number
-def grinding_sim(num_challenger, num_adversary):
-
+def grinding_sim(arg):
+    (num_challenger, num_adversary) = arg
     # Maximum difference between leading block number and viable branches
     # branches with a gap greater than branchDepth are cut
     branch_depth = 2
@@ -122,8 +123,10 @@ def grinding_sim(num_challenger, num_adversary):
     # Main for loop over all slots
     # for slot in slots:
     slot = 0
-    # while len(fork_intervals) < 1000:
-    while slot < total_slots:
+    reach = 0
+    margin = 0
+    while len(fork_intervals) < 1000:
+    # while slot < total_slots:
         # Accumulate new branches
         new_branches = []
 
@@ -143,86 +146,75 @@ def grinding_sim(num_challenger, num_adversary):
                 # If this branch satisfies vrf test new child branches are created at the next height and next reserve
                 if challenger.test(slot, branch[0]):
                     new_branches.append([slot, branch[1] + 1, branch[2] + 1, 0])
-        for entry in new_branches:
-            branches = np.vstack([branches, entry])
-        # Remove duplicate branches
-        branches = np.unique(branches, axis=0)
+        if len(new_branches) > 0:
 
-        # Among all parent slots, keep the highest generation branch and discard the rest
-        # slot_set = set()
-        # for branch in branches:
-        #     slot_set.add(branch[0])
-        # branch_max = {x: -1 for x in slot_set}
-        # branch_reserve = {x: -1 for x in slot_set}
-        # # Find the maximum generation
-        # max_block_num = 0
-        # for sl in slot_set:
-        #     for entry in branches:
-        #         if entry[0] == sl:
-        #             if entry[1] > branch_max[sl]:
-        #                 branch_max[sl] = entry[1]
-        #                 branch_reserve[sl] = entry[2]
-        #                 max_block_num = max(max_block_num, branch_max[sl])
+            for entry in new_branches:
+                branches = np.vstack([branches, entry])
+            # Remove duplicate branches
+            branches = np.unique(branches, axis=0)
+            leading_honest_block = 0
+            reach = 0
 
-        # def add_reserve(b):
-        #     return np.concatenate((np.asarray(b), [branch_reserve[b[0]]]), axis=0)
+            for branch in branches:
+                leading_honest_block = max(branch[1]-branch[2], leading_honest_block)
 
-        # Remove all branches below the maximum generation minus the branch depth
-        # branches = np.array(list(
-        #     map(add_reserve, list(filter(lambda x: max_block_num - x[1] < branch_depth, list(branch_max.items()))))
-        # ))
-        # The maximum honest block among all branches
-        leading_honest_block = 0
-        reach = 0
+            for branch in branches:
+                if branch[1]-branch[2] == leading_honest_block:
+                    reach = max(branch[2], reach)
 
-        for branch in branches:
-            leading_honest_block = max(branch[1]-branch[2], leading_honest_block)
+            def add_margin(b):
+                gap = leading_honest_block - (b[1]-b[2])
+                reserve = b[2]
+                return [b[0], b[1], b[2], reserve - gap]
 
-        for branch in branches:
-            if branch[1]-branch[2] == leading_honest_block:
-                reach = max(branch[2], reach)
+            branches = np.array(list(map(add_margin, list(branches))))
 
-        def add_margin(b):
-            gap = leading_honest_block - (b[1]-b[2])
-            reserve = b[2]
-            return [b[0], b[1], b[2], reserve - gap]
+            num_viable = 0
 
-        branches = np.array(list(map(add_margin, list(branches))))
+            for branch in branches:
+                jj = jj + 1
+                avg_margin = avg_margin * (jj-1)/jj + branch[3] / jj
+                if branch[3] >= 0:
+                    num_viable = num_viable + 1
 
-        num_viable = 0
-
-        for branch in branches:
-            jj = jj + 1
-            avg_margin = avg_margin * (jj-1)/jj + branch[3] / jj
-            if branch[3] >= 0:
-                num_viable = num_viable + 1
-
-        if num_viable >= 2:
-            if not forked:
-                forked = True
-                last_fork = leading_honest_block
-            forks = forks + 1
-        else:
-            if forked:
-                forked = False
-                j = j+1
-                avg_settle = avg_settle * (j-1)/j + (leading_honest_block - last_fork)/j
-                fork_intervals.append(abs(leading_honest_block - last_fork))
-
-        margin = -total_slots
-        found_reach = False
-        for branch in branches:
-            if branch[3] == reach and not found_reach:
-                found_reach = True
+            if num_viable >= 2:
+                if not forked:
+                    forked = True
+                    last_fork = leading_honest_block
+                elif forked and leading_honest_block - last_fork >= k_settle:
+                    forks = forks + 1
+                    forked = False
+                    j = j+1
+                    avg_settle = avg_settle * (j-1)/j + (leading_honest_block - last_fork)/j
+                    fork_intervals.append(abs(leading_honest_block - last_fork))
+                    branches = np.empty((1, 4), dtype=int)
+                    branches = np.vstack([branches, [slot, leading_honest_block, 0, 0]])
             else:
-                margin = max(margin, branch[3])
-        branches = branches[branches[:, 1].argsort()]
-        # if len(new_branches) > 0:
-        #     print(branches)
-        #     print([reach, margin, slot])
+                if forked:
+                    forks = forks + 1
+                    forked = False
+                    j = j+1
+                    avg_settle = avg_settle * (j-1)/j + (leading_honest_block - last_fork)/j
+                    fork_intervals.append(leading_honest_block - last_fork)
+                    branches = np.empty((1, 4), dtype=int)
+                    branches = np.vstack([branches, [slot, leading_honest_block, 0, 0]])
+                else:
+                    fork_intervals.append(0)
+            margin = -total_slots
+            found_reach = False
+            for branch in branches:
+                if branch[3] == reach and not found_reach:
+                    found_reach = True
+                else:
+                    margin = max(margin, branch[3])
+            branches = branches[branches[:, 1].argsort()]
+            # if len(new_branches) > 0:
+            #     print(branches)
+            #     print([reach, margin, slot])
+            branches = np.array(list(filter(lambda x: x[3] > -branch_depth, list(branches))))
         if slot % 1000 == 0:
             print([reach, margin, slot, len(branches)])
-        branches = np.array(list(filter(lambda x: x[3] > -branch_depth, list(branches))))
+
         slot = slot + 1
     max_l = 0
     num_b = 0
@@ -236,7 +228,7 @@ def grinding_sim(num_challenger, num_adversary):
         + ("\nFinal number of branches: " + str(num_b)) \
         + "\n[Parent slot, block number, reserve, margin]:\n" + str(branches)
     print(hud)
-    return [max_l, avg_settle, forks/total_slots, avg_margin], fork_intervals
+    return [max_l/slot, avg_settle, forks/slot, avg_margin], fork_intervals
 
 
 if __name__ == '__main__':
@@ -246,47 +238,82 @@ if __name__ == '__main__':
     frk_data = []
     mrg_data = []
     chg_data = []
+    prk_data = []
     adv_axis = []
 
-    data_points = range(5, 45, 5)
 
-    # pool = mp.Pool(mp.cpu_count())
+    matplotlib.use("pgf")
+    matplotlib.rcParams.update({
+        "pgf.texsystem": "pdflatex",
+        'font.family': 'serif',
+        'text.usetex': True,
+        'pgf.rcfonts': False,
+    })
+
+
+    data_points = range(0, 101, 5)
+
+    for k in data_points:
+        adv_axis.append(k/100)
+
+    pool = mp.Pool(mp.cpu_count())
 
     outfile = open('test.npy', 'wb')
 
-    for k in data_points:
-        print(k)
-        data, data_forks = grinding_sim(100, k)
-        chg_data.append(data[0]/total_slots)
+    output = pool.map(grinding_sim, [(100, k) for k in data_points])
+    for entry in output:
+        data, data_forks = entry
+        chg_data.append(data[0])
         avg_data.append(np.asarray(data_forks))
         frk_data.append(data[2])
         mrg_data.append(data[3])
-        adv_axis.append(k/100)
-        np.save(outfile, np.asarray(data_forks))
-    plt.figure()
-    plt.plot(adv_axis, frk_data)
-    plt.xlabel("Adversary fraction")
-    plt.ylabel("Proportion of time in a forked state")
+
+    pool.close()
+
+    # plt.figure()
+    # plt.plot(adv_axis, frk_data)
+    # plt.xlabel("Adversary fraction")
+    # plt.ylabel("Proportion of time in a forked state")
     fig = plt.figure()
+    fig.set_size_inches(w=4.7747, h=3.5)
     ax = fig.add_subplot(111, projection='3d')
     nbins = 20
     for ys, z in zip(avg_data, adv_axis):
         hist, bins = np.histogram(ys, bins=nbins, density=True, range=(0, nbins))
         xs = (bins[:-1] + bins[1:])/2
-
+        cnt = 0
+        for entry in ys:
+            if entry >= k_settle:
+                cnt = cnt + 1
+        prk_data.append(cnt/len(ys))
         ax.bar(xs, hist, zs=z, zdir='y', alpha=0.8)
     ax.axes.set_xlim3d(left=0.0, right=nbins)
     ax.set_xlabel('Fork length')
     ax.set_ylabel('Adversary fraction')
-    ax.set_zlabel('Number of forks')
+    ax.set_zlabel('Probability Density')
+    matplotlib.pyplot.savefig('challenger_hist.pgf')
 
-    plt.show()
-    plt.figure()
-    plt.plot(adv_axis, chg_data)
-    plt.xlabel("Adversary fraction")
-    plt.ylabel("Effective Growth")
-    plt.show()
-    #
+    fig1 = plt.figure()
+    fig1.set_size_inches(w=4.7747, h=3.5)
+    ax1 = fig1.add_subplot(111)
+    ax1.plot(adv_axis, chg_data)
+    ax1.set_xlabel("Adversary fraction")
+    ax1.set_ylabel("Effective Growth")
+    matplotlib.pyplot.savefig('challenger_growth.pgf')
+
+    fig2 = plt.figure()
+    fig2.set_size_inches(w=4.7747, h=3.5)
+
+    ax2 = fig2.add_subplot(111)
+    r_axis = np.linspace(0.0, 0.5, 50)
+    line = np.power(2*np.asarray(r_axis), k_settle)*np.power(2.0-2*r_axis, k_settle)
+    ax2.plot(r_axis, line, label="Covert")
+    ax2.plot(adv_axis, prk_data, label="Grinding")
+    ax2.set_xlabel("Adversary fraction")
+    ax2.set_ylabel("Pr[settlement violation] for $k = "+str(k_settle)+"$")
+    ax2.legend()
+    matplotlib.pyplot.savefig('challenger_settle.pgf')
+
     # hits = []
     #
     # for ys, z in zip(avg_data, adv_axis):
@@ -303,5 +330,5 @@ if __name__ == '__main__':
     # plt.xlabel("Adversary fraction")
     # plt.ylabel("Number of forks")
     # plt.show()
-
+    #
 
