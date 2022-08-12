@@ -9,7 +9,7 @@ seed = 1
 np.random.seed(seed)
 
 # Number of Slots
-total_slots = 10000000
+total_slots = 1000000
 # Slots
 slots = np.arange(total_slots)
 # Forging window
@@ -78,7 +78,7 @@ class Challenger:
             return self.phi_cache[d]
 
     def test(self, slot, parentSlot):
-        if self.ys[slot] < self.threshold(slot-parentSlot):
+        if self.ys[slot % total_slots] < self.threshold(slot-parentSlot):
             return True
         else:
             return False
@@ -89,7 +89,7 @@ def select_branch(branches):
     branches = branches[branches[:, 1].argsort()]
     # print(branches)
     bn = 0
-    ps = total_slots + 1
+    ps = 100000000000000
     for branch in branches:
         bn = max(bn, branch[1] - branch[2])
     for branch in branches:
@@ -200,7 +200,7 @@ def grinding_sim(arg):
                     branches = np.vstack([branches, [slot, leading_honest_block, 0, 0]])
                 else:
                     fork_intervals.append(0)
-            margin = -total_slots
+            margin = -1000000000000000
             found_reach = False
             for branch in branches:
                 if branch[3] == reach and not found_reach:
@@ -223,7 +223,7 @@ def grinding_sim(arg):
         num_b = num_b + 1
     hud = ("Average Margin: "+str(avg_margin)) \
         + ("\nFork length: " + str(avg_settle)) \
-        + ("\nFork rate: " + str(forks/total_slots)) \
+        + ("\nFork rate: " + str(forks/slot)) \
         + ("\nMaximum block number: " + str(max_l)) \
         + ("\nFinal number of branches: " + str(num_b)) \
         + "\n[Parent slot, block number, reserve, margin]:\n" + str(branches)
