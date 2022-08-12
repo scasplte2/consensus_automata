@@ -252,7 +252,7 @@ if __name__ == '__main__':
     })
 
 
-    data_points = range(0, 51, 2)
+    data_points = range(0, 51, 5)
 
     for k in data_points:
         adv_axis.append(k/100)
