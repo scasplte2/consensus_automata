@@ -12,6 +12,7 @@ if __name__ == '__main__':
         'font.family': 'serif',
         'text.usetex': True,
         'pgf.rcfonts': False,
+        'axes.unicode_minus': False
     })
 
     # Grinding advantage plots

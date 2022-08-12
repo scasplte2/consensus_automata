@@ -9,7 +9,7 @@ seed = 1
 np.random.seed(seed)
 
 # Number of Slots
-total_slots = 1000000
+total_slots = 10000000
 # Slots
 slots = np.arange(total_slots)
 # Forging window
@@ -125,7 +125,7 @@ def grinding_sim(arg):
     slot = 0
     reach = 0
     margin = 0
-    while len(fork_intervals) < 1000:
+    while len(fork_intervals) < 10000:
     # while slot < total_slots:
         # Accumulate new branches
         new_branches = []
@@ -248,10 +248,11 @@ if __name__ == '__main__':
         'font.family': 'serif',
         'text.usetex': True,
         'pgf.rcfonts': False,
+        'axes.unicode_minus': False
     })
 
 
-    data_points = range(0, 101, 5)
+    data_points = range(0, 51, 2)
 
     for k in data_points:
         adv_axis.append(k/100)
@@ -305,12 +306,18 @@ if __name__ == '__main__':
     fig2.set_size_inches(w=4.7747, h=3.5)
 
     ax2 = fig2.add_subplot(111)
-    r_axis = np.linspace(0.0, 0.5, 50)
+    r_axis = np.linspace(0.01, 0.5, 50)
     line = np.power(2*np.asarray(r_axis), k_settle)*np.power(2.0-2*r_axis, k_settle)
-    ax2.plot(r_axis, line, label="Covert")
-    ax2.plot(adv_axis, prk_data, label="Grinding")
+    ax2.plot(r_axis, np.log10(line), label="Covert")
+    scatter_data_x = []
+    scatter_data_y = []
+    for r, p in zip(adv_axis, prk_data):
+        if p > 0.0:
+            scatter_data_x.append(r)
+            scatter_data_y.append(np.log10(p))
+    ax2.scatter(scatter_data_x, scatter_data_y, label="Grinding", color="red")
     ax2.set_xlabel("Adversary fraction")
-    ax2.set_ylabel("Pr[settlement violation] for $k = "+str(k_settle)+"$")
+    ax2.set_ylabel("Log Pr[settlement violation] for $k = "+str(k_settle)+"$")
     ax2.legend()
     matplotlib.pyplot.savefig('challenger_settle.pgf')
 
