@@ -315,7 +315,7 @@ if __name__ == '__main__':
         if p > 0.0:
             scatter_data_x.append(r)
             scatter_data_y.append(np.log10(p))
-    ax2.scatter(scatter_data_x, scatter_data_y, label="Grinding", color="red")
+    ax2.scatter(scatter_data_x, scatter_data_y, label="Grinding", color="red", marker=".")
     ax2.set_xlabel("Adversary fraction")
     ax2.set_ylabel("Log Pr[settlement violation] for $k = "+str(k_settle)+"$")
     ax2.legend()
