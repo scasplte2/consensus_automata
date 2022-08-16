@@ -181,8 +181,6 @@ def grinding_sim(arg):
                     j = j+1
                     avg_settle = avg_settle * (j-1)/j + (leading_honest_block - last_fork)/j
                     fork_intervals.append(abs(leading_honest_block - last_fork))
-                    branches = np.empty((1, 4), dtype=int)
-                    branches = np.vstack([branches, [slot, leading_honest_block, 0, 0]])
             else:
                 if forked:
                     forks = forks + 1
@@ -190,8 +188,6 @@ def grinding_sim(arg):
                     j = j+1
                     avg_settle = avg_settle * (j-1)/j + (leading_honest_block - last_fork)/j
                     fork_intervals.append(leading_honest_block - last_fork)
-                    branches = np.empty((1, 4), dtype=int)
-                    branches = np.vstack([branches, [slot, leading_honest_block, 0, 0]])
                 else:
                     fork_intervals.append(0)
             margins = []
@@ -200,12 +196,15 @@ def grinding_sim(arg):
             reach = max(margins)
             margins.remove(reach)
             margin = max(margins)
-
             branches = branches[branches[:, 1].argsort()]
             # if len(new_branches) > 0:
             #     print(branches)
             #     print([reach, margin, slot])
             branches = np.array(list(filter(lambda x: x[3] > -branch_depth, list(branches))))
+            max_branches = 100
+            if len(branches) > max_branches:
+                branches = np.vsplit(branches, np.array([max_branches, 1]))[0]
+
         if slot % 1000 == 0:
             print([reach, margin, slot, len(branches)], num_adversary)
 
