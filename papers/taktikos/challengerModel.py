@@ -9,7 +9,7 @@ seed = 1
 np.random.seed(seed)
 
 # Number of Slots
-total_slots = 10000
+total_slots = 100000
 # Slots
 slots = np.arange(total_slots)
 # Forging window
@@ -85,11 +85,11 @@ class Challenger:
 
 
 # Selects branch to serve to challengers
-def select_branch(branches):
+def select_branch(branches, slot):
     branches = branches[branches[:, 1].argsort()]
     # print(branches)
     bn = 0
-    ps = 100000000000000
+    ps = slot
     for branch in branches:
         bn = max(bn, branch[1] - branch[2])
     for branch in branches:
@@ -126,7 +126,6 @@ def grinding_sim(arg):
     reach = 0
     margin = 0
     while len(fork_intervals) < 10000:
-    # while slot < total_slots:
         # Accumulate new branches
         new_branches = []
 
@@ -136,7 +135,7 @@ def grinding_sim(arg):
         adversary = challengers[:num_adversary]
 
         # Selects the branch that the honest challengers extend
-        honest_branch = select_branch(branches)
+        honest_branch = select_branch(branches, slot)
         for challenger in honest:
             # If this branch satisfies vrf test new child branches are created at the next height with reserve 0
             if challenger.test(slot, honest_branch[0]):
@@ -151,7 +150,7 @@ def grinding_sim(arg):
             for entry in new_branches:
                 branches = np.vstack([branches, entry])
             # Remove duplicate branches
-            # branches = np.unique(branches, axis=0)
+            branches = np.unique(branches, axis=0)
             leading_honest_block = 0
 
             for branch in branches:
@@ -208,7 +207,7 @@ def grinding_sim(arg):
             #     print([reach, margin, slot])
             branches = np.array(list(filter(lambda x: x[3] > -branch_depth, list(branches))))
         if slot % 1000 == 0:
-            print([reach, margin, slot, len(branches)])
+            print([reach, margin, slot, len(branches)], num_adversary)
 
         slot = slot + 1
     max_l = 0
