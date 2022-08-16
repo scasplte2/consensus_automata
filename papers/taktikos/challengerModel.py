@@ -151,16 +151,11 @@ def grinding_sim(arg):
             for entry in new_branches:
                 branches = np.vstack([branches, entry])
             # Remove duplicate branches
-            branches = np.unique(branches, axis=0)
+            # branches = np.unique(branches, axis=0)
             leading_honest_block = 0
-            reach = 0
 
             for branch in branches:
                 leading_honest_block = max(branch[1]-branch[2], leading_honest_block)
-
-            for branch in branches:
-                if branch[1]-branch[2] == leading_honest_block:
-                    reach = max(branch[2], reach)
 
             def add_margin(b):
                 gap = leading_honest_block - (b[1]-b[2])
@@ -200,13 +195,13 @@ def grinding_sim(arg):
                     branches = np.vstack([branches, [slot, leading_honest_block, 0, 0]])
                 else:
                     fork_intervals.append(0)
-            margin = -1000000000000000
-            found_reach = False
+            margins = []
             for branch in branches:
-                if branch[3] == reach and not found_reach:
-                    found_reach = True
-                else:
-                    margin = max(margin, branch[3])
+                margins.append(branch[3])
+            reach = max(margins)
+            margins.remove(reach)
+            margin = max(margins)
+
             branches = branches[branches[:, 1].argsort()]
             # if len(new_branches) > 0:
             #     print(branches)
