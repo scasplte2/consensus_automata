@@ -9,7 +9,7 @@ seed = 1
 np.random.seed(seed)
 
 # Number of Slots
-total_slots = 1000000
+total_slots = 10000
 # Slots
 slots = np.arange(total_slots)
 # Forging window
