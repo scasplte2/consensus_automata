@@ -400,8 +400,8 @@ if __name__ == '__main__':
     ax2 = fig2.add_subplot(111)
     r_axis = np.linspace(0.01, 0.5, 50)
     line = np.power(2*np.asarray(r_axis), k_settle)*np.power(2.0-2*r_axis, k_settle)
-    r_axis = np.append(r_axis, 1.0)
-    line = np.append(line, 1.0)
+    # r_axis = np.append(r_axis, 1.0)
+    # line = np.append(line, 1.0)
     ax2.plot(r_axis, np.log10(line), label="Covert")
     scatter_data_x = []
     scatter_data_x_2 = []
