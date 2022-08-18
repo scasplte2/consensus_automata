@@ -22,8 +22,8 @@ fa = 0.5
 fb = 0.05
 
 
-k_settle = 10
-
+k_settle = 6
+total_forks = 10000
 
 # Use a specified difficulty curve from txt
 user_defined_curve = False
@@ -125,7 +125,7 @@ def grinding_sim(arg):
     slot = 0
     reach = 0
     margin = 0
-    while len(fork_intervals) < 10000:
+    while len(fork_intervals) < total_forks:
         # Accumulate new branches
         new_branches = []
 
@@ -206,7 +206,7 @@ def grinding_sim(arg):
                 branches = np.vsplit(branches, np.array([max_branches, 1]))[0]
 
         if slot % 1000 == 0:
-            print([reach, margin, slot, len(branches)], num_adversary)
+            print([reach, margin, slot, len(branches)], num_adversary, len(fork_intervals))
 
         slot = slot + 1
     max_l = 0
@@ -221,21 +221,96 @@ def grinding_sim(arg):
         + ("\nFinal number of branches: " + str(num_b)) \
         + "\n[Parent slot, block number, reserve, margin]:\n" + str(branches)
     print(hud)
-    return [max_l/slot, avg_settle, forks/slot, avg_margin], fork_intervals
+    return max_l/slot, fork_intervals
+
+
+def grinding_sim_static(arg):
+    (num_challenger, num_adversary) = arg
+    # Set of challengers with equal resources
+    challengers = [Challenger(1.0/num_challenger) for i in range(num_challenger)]
+
+    branches = np.zeros((1, 4), dtype=int)
+
+    # Variables for tracking forks
+    forked = False
+    last_fork = 0
+    fork_intervals = []
+    # Main for loop over all slots
+    # for slot in slots:
+    slot = 0
+    while len(fork_intervals) < total_forks:
+        # Accumulate new branches
+        new_branches = []
+        honest = challengers[num_adversary:]
+        adversary = challengers[:num_adversary]
+
+        # Selects the branch that the honest challengers extend
+        for branch in branches:
+            for challenger in honest:
+                # If this branch satisfies vrf test new child branches are created at the next height with reserve 0
+                if challenger.test(slot, branch[0]):
+                    new_branches.append([slot, branch[1] + 1, 0, 0])
+            for challenger in adversary:
+                # If this branch satisfies vrf test new child branches are created at the next height and next reserve
+                if challenger.test(slot, branch[0]):
+                    new_branches.append([slot, branch[1] + 1, branch[2] + 1, 0])
+
+        if len(new_branches) > 0:
+            branches = np.asarray(new_branches)
+            leading_honest_block = 0
+            for branch in branches:
+                leading_honest_block = max(branch[1]-branch[2], leading_honest_block)
+            if len(branches) > 1:
+                if not forked:
+                    forked = True
+                    last_fork = leading_honest_block
+                elif forked and leading_honest_block - last_fork >= k_settle:
+                    forked = False
+                    fork_intervals.append(leading_honest_block - last_fork)
+            else:
+                if not forked:
+                    for branch in branches:
+                        if branch[2] > 0:
+                            forked = True
+                            last_fork = leading_honest_block
+                        else:
+                            fork_intervals.append(0)
+                elif forked and leading_honest_block - last_fork >= k_settle:
+                    forked = False
+                    fork_intervals.append(leading_honest_block - last_fork)
+                elif forked:
+                    for branch in branches:
+                        if branch[2] == 0:
+                            forked = False
+                            fork_intervals.append(leading_honest_block - last_fork)
+
+        branches = branches[branches[:, 1].argsort()]
+        if len(branches) > 1:
+            branches = np.vsplit(branches, np.array([1, 2]))[1]
+        if slot % 1000 == 0:
+            print(slot, num_adversary, len(fork_intervals))
+
+        slot = slot + 1
+    max_l = 0
+    for branch in branches:
+        max_l = max(branch[1], max_l)
+    print(branches)
+    print(max_l)
+    return max_l/slot, fork_intervals
 
 
 if __name__ == '__main__':
+
     avg_data = []
-    var_data = []
-    std_data = []
-    frk_data = []
-    mrg_data = []
     chg_data = []
     prk_data = []
+    avg_data_2 = []
+    chg_data_2 = []
+    prk_data_2 = []
     adv_axis = []
 
-
     matplotlib.use("pgf")
+
     matplotlib.rcParams.update({
         "pgf.texsystem": "pdflatex",
         'font.family': 'serif',
@@ -244,30 +319,31 @@ if __name__ == '__main__':
         'axes.unicode_minus': False
     })
 
-
-    data_points = range(0, 51, 5)
+    data_points = range(0, 100, 5)
 
     for k in data_points:
         adv_axis.append(k/100)
 
     pool = mp.Pool(mp.cpu_count())
-
-    outfile = open('test.npy', 'wb')
-
-    output = pool.map(grinding_sim, [(100, k) for k in data_points])
-    for entry in output:
-        data, data_forks = entry
-        chg_data.append(data[0])
-        avg_data.append(np.asarray(data_forks))
-        frk_data.append(data[2])
-        mrg_data.append(data[3])
-
+    output = pool.map(grinding_sim_static, [(100, k) for k in data_points])
     pool.close()
 
-    # plt.figure()
-    # plt.plot(adv_axis, frk_data)
-    # plt.xlabel("Adversary fraction")
-    # plt.ylabel("Proportion of time in a forked state")
+    pool = mp.Pool(mp.cpu_count())
+    output_2 = pool.map(grinding_sim, [(100, k) for k in data_points])
+    pool.close()
+
+    # output = map(grinding_sim_static, [(100, k) for k in data_points])
+
+    for entry in output:
+        data, data_forks = entry
+        chg_data.append(data)
+        avg_data.append(np.asarray(data_forks))
+
+    for entry in output_2:
+        data, data_forks = entry
+        chg_data_2.append(data)
+        avg_data_2.append(np.asarray(data_forks))
+
     fig = plt.figure()
     fig.set_size_inches(w=4.7747, h=3.5)
     ax = fig.add_subplot(111, projection='3d')
@@ -285,14 +361,37 @@ if __name__ == '__main__':
     ax.set_xlabel('Fork length')
     ax.set_ylabel('Adversary fraction')
     ax.set_zlabel('Probability Density')
+    ax.set_title('Static Adversary')
     matplotlib.pyplot.savefig('challenger_hist.pgf')
+
+    fig = plt.figure()
+    fig.set_size_inches(w=4.7747, h=3.5)
+    ax = fig.add_subplot(111, projection='3d')
+    nbins = 20
+    for ys, z in zip(avg_data_2, adv_axis):
+        hist, bins = np.histogram(ys, bins=nbins, density=True, range=(0, nbins))
+        xs = (bins[:-1] + bins[1:])/2
+        cnt = 0
+        for entry in ys:
+            if entry >= k_settle:
+                cnt = cnt + 1
+        prk_data_2.append(cnt/len(ys))
+        ax.bar(xs, hist, zs=z, zdir='y', alpha=0.8)
+    ax.axes.set_xlim3d(left=0.0, right=nbins)
+    ax.set_xlabel('Fork length')
+    ax.set_ylabel('Adversary fraction')
+    ax.set_zlabel('Probability Density')
+    ax.set_title('Grinding Adversary')
+    matplotlib.pyplot.savefig('challenger_hist_2.pgf')
 
     fig1 = plt.figure()
     fig1.set_size_inches(w=4.7747, h=3.5)
     ax1 = fig1.add_subplot(111)
-    ax1.plot(adv_axis, chg_data)
+    ax1.plot(adv_axis, chg_data, label="Static")
+    ax1.plot(adv_axis, chg_data_2, label="Grinding")
     ax1.set_xlabel("Adversary fraction")
     ax1.set_ylabel("Effective Growth")
+    ax1.legend()
     matplotlib.pyplot.savefig('challenger_growth.pgf')
 
     fig2 = plt.figure()
@@ -301,14 +400,24 @@ if __name__ == '__main__':
     ax2 = fig2.add_subplot(111)
     r_axis = np.linspace(0.01, 0.5, 50)
     line = np.power(2*np.asarray(r_axis), k_settle)*np.power(2.0-2*r_axis, k_settle)
+    r_axis = np.append(r_axis, 1.0)
+    line = np.append(line, 1.0)
     ax2.plot(r_axis, np.log10(line), label="Covert")
     scatter_data_x = []
+    scatter_data_x_2 = []
     scatter_data_y = []
+    scatter_data_y_2 = []
     for r, p in zip(adv_axis, prk_data):
         if p > 0.0:
             scatter_data_x.append(r)
             scatter_data_y.append(np.log10(p))
-    ax2.scatter(scatter_data_x, scatter_data_y, label="Grinding", color="red", marker=".")
+    for r, p in zip(adv_axis, prk_data_2):
+        if p > 0.0:
+            scatter_data_x_2.append(r)
+            scatter_data_y_2.append(np.log10(p))
+
+    ax2.scatter(scatter_data_x, scatter_data_y, label="Static", color="red", marker="o")
+    ax2.scatter(scatter_data_x_2, scatter_data_y_2, label="Grinding", color="green", marker="x")
     ax2.set_xlabel("Adversary fraction")
     ax2.set_ylabel("Log Pr[settlement violation] for $k = "+str(k_settle)+"$")
     ax2.legend()
