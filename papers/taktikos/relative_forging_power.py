@@ -314,8 +314,8 @@ def pdf_old(d_axis, r, gamma, slot_gap, fa, fb, delay):
     pdf_a = []
     while not done:
         (nd, accumulation) = pdf_acc(i, r, gamma, slot_gap, fa, fb, delay, accumulation)
-        if i == max_iter:
-            print("Warning: distribution did not converge", nd, accumulation)
+        # if i == max_iter:
+            # print("Warning: distribution did not converge", nd, accumulation)
         if trunc_error > nd > 0.0 and old_value > 0.0 or accumulation == 0.0 or i == max_iter:
             done = True
         else:
@@ -335,8 +335,8 @@ def pdf(d_axis, r, gamma, slot_gap, fa, fb, delay):
     pdf_ext = []
     while not done:
         accumulation = pi_acc(i, r, gamma, slot_gap, fa, fb, delay, accumulation)
-        if i == max_iter:
-            print("Warning: distribution did not converge", accumulation)
+        # if i == max_iter:
+        #     print("Warning: distribution did not converge", accumulation)
         if trunc_error > accumulation >= 0.0 or i == max_iter:
             done = True
         else:
@@ -509,8 +509,8 @@ def block_frequency_trunc(r, gamma, slot_gap, fa, fb, delay):
         pdf_a = []
         while not done:
             (nd, accumulation) = pdf_acc(i, r, gamma, slot_gap, fa, fb, delay, accumulation)
-            if i == max_iter:
-                print("Warning: distribution did not converge", nd, accumulation)
+            # if i == max_iter:
+            #     print("Warning: distribution did not converge", nd, accumulation)
             if trunc_error > nd > 0.0 and old_value > 0.0 or accumulation == 0.0 or i == max_iter:
                 done = True
             else:
@@ -544,8 +544,8 @@ def block_frequency_trunc_pi_norm(r, gamma, slot_gap, fa, fb, delay):
         pdf_ext = []
         while not done:
             accumulation = pi_acc(i, r, gamma, slot_gap, fa, fb, delay, accumulation)
-            if i == max_iter:
-                print("Warning: distribution did not converge", accumulation)
+            # if i == max_iter:
+                # print("Warning: distribution did not converge", accumulation)
             if trunc_error > accumulation >= 0.0 or i == max_iter:
                 done = True
             else:
@@ -603,8 +603,8 @@ if __name__ == '__main__':
     a_init_data = [block_frequency(1.0 - r, gamma_init, slot_gap_init, fa_init, fb_init, 0) for r in r_axis]
     line1, = ax[1].plot(r_axis, h_init_data, 'b-', label='honest (r)')
     line2, = ax[1].plot(r_axis, a_init_data, 'r-', label='covert (1-r)')
-    line3, = ax[1].plot([0.0, 1.0], [0.0, max(h_init_data)], 'g-', label='$f_{\mathrm{effective}} \cdot r$')
     line4, = ax[1].plot(r_axis, a_init_data, color='r', linestyle='dotted', label='grind (1-r)')
+    line3, = ax[1].plot([0.0, 1.0], [0.0, max(h_init_data)], 'g-', label='$PoW$')
 
     (inter_x, inter_y) = find_intersection(a_init_data, h_init_data, r_axis)
 

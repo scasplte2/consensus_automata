@@ -104,6 +104,7 @@ if __name__ == '__main__':
     fig3.set_size_inches(w=4.7747, h=3.5)
     f_effective = np.amax(zv2)
     curve_consistency, = ax3.plot(pb3d[1, :] * f_effective, 1.0 - pb3d[0, :], label="Taktikos", color='g')
+    curve_praos, = ax3.plot(pb3d[1, :] * f_effective, 1.0 - pb3d[0, :], label="Praos", color='r')
     block_per_delay = np.linspace(0.0, np.amax(pb3d[1, :] * f_effective), len(pb3d[1, :]))
     pow_consistency_bound = v_pow_bound(block_per_delay)
     curve_pow, = ax3.plot(block_per_delay, pow_consistency_bound, label="PoW", color='b', linestyle=':')
@@ -111,7 +112,7 @@ if __name__ == '__main__':
     ax3.set(xlabel="Blocks per Delay Interval")
     ax3.set(ylabel="Consistency Bound")
     ax3.legend()
-
+    ax3.set_xlim(0.0, 5.0)
 
     def plot_data_points():
         def multi_dict(k, v):
@@ -266,6 +267,65 @@ if __name__ == '__main__':
         return consistency_bound
 
 
+    def update_consistency_praos(adv_data=np.asarray([]), show=True):
+        max_iter_cons = 10
+        global curve_praos
+        if show:
+            curve_praos.remove()
+        scale_factor = 2
+        f_effective = block_frequency(1.0, 0, 0, 0, s_fb.val, 0)
+        block_per_delay = np.linspace(0.0, np.amax(pb3d[1, :]) * f_effective * scale_factor, n_cons_plt)
+        consistency_bound = v_pow_bound(block_per_delay)
+        window = 0.005
+        w0 = 0.005
+        c0 = 0.5
+        if len(adv_data) == 0:
+            for d in np.array(range(0, scale_factor * n_cons_plt, scale_factor)):
+                i = 0
+                while i < max_iter_cons:
+                    try:
+                        x1 = c0 - window
+                        x2 = c0 + window
+                        z11 = block_frequency(x1, 0, 0, 0, s_fb.val, d)
+                        z12 = block_frequency(x2, 0, 0, 0, s_fb.val, d)
+                        z21 = block_frequency(1.0 - x1, 0, 0, 0, s_fb.val, 0)
+                        z22 = block_frequency(1.0 - x2, 0, 0, 0, s_fb.val, 0)
+                        (xi, zi) = line_intersection(([x1, z11], [x2, z12]), ([x1, z21], [x2, z22]))
+                        consistency_bound[d // scale_factor] = 1.0 - xi
+                        c0 = xi
+                        i = max_iter_cons
+                    except ZeroDivisionError:
+                        window = window + w0
+                        i = i + 1
+                        # print("increasing window")
+        else:
+            interp = interpolate.interp1d(r_axis, adv_data, kind="cubic")
+            c0, z0 = find_intersection(zv[0, :], interp(xv[0, :]), xv[0, :])
+            for d in np.array(range(0, scale_factor * n_cons_plt, scale_factor)):
+                i = 0
+                while i < max_iter_cons:
+                    try:
+                        x1 = c0 - window
+                        x2 = c0 + window
+                        z11 = block_frequency(x1, 0, 0, 0, s_fb.val, d)
+                        z12 = block_frequency(x2, 0, 0, 0, s_fb.val, d)
+                        z21 = interp(x1)
+                        z22 = interp(x2)
+                        (xi, zi) = line_intersection(([x1, z11], [x2, z12]), ([x1, z21], [x2, z22]))
+                        consistency_bound[d // scale_factor] = 1.0 - xi
+                        c0 = xi
+                        i = max_iter_cons
+                    except ZeroDivisionError:
+                        window = window + w0
+                        i = i + 1
+                        # print("increasing window")
+        if show:
+            curve_praos, = ax3.plot(block_per_delay, consistency_bound, label="Praos", color='r')
+            ax3.relim()
+            ax3.autoscale_view()
+        return consistency_bound
+
+
     def update_cont(label, adv_data=np.asarray([]), show=True):
         global surf1, surf2, scatter, radio_var
         ch = 'winter'
@@ -348,6 +408,7 @@ if __name__ == '__main__':
             ax2.relim()
             ax2.autoscale_view(tight=True)
             ax2.set_zlim3d(0.0, min(1.0, max(np.amax(zv), np.amax(zv2))))
+        update_consistency_praos(adv_data, show)
         cb = update_consistency(adv_data, show)
         if show:
             plt.show(block=False)
@@ -543,7 +604,7 @@ if __name__ == '__main__':
     s_delay.on_changed(update_delay)
     b_grind.on_clicked(update_grind)
     b_plot_consist.on_clicked(plot_consistency_heatmap)
-
+    plt.tight_layout()
     matplotlib.pyplot.savefig('consistency_bound_plots.pgf')
     # radio.on_clicked(update_cont)
 

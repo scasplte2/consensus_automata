@@ -34,5 +34,6 @@ if __name__ == '__main__':
     axx.set_xlabel("Adversary Fraction")
     axx.set_ylabel("Block Frequency (1/slot)")
     axx.legend()
+    plt.tight_layout()
     matplotlib.pyplot.savefig('relative_plots.pgf')
 

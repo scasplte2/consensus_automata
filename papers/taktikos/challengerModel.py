@@ -299,6 +299,80 @@ def grinding_sim_static(arg):
     return max_l/slot, fork_intervals
 
 
+def grinding_sim_covert(arg):
+    (num_challenger, num_adversary) = arg
+    # Set of challengers with equal resources
+    challengers = [Challenger(1.0/num_challenger) for i in range(num_challenger)]
+
+    branches = np.zeros((1, 4), dtype=int)
+    honest_branch = np.zeros((1, 4), dtype=int)
+    # Variables for tracking forks
+    forked = False
+    last_fork = 0
+    l_honest = 0
+    l_adversary = 0
+    fork_intervals = []
+    # Main for loop over all slots
+    # for slot in slots:
+    slot = 0
+    while len(fork_intervals) < total_forks:
+        # Accumulate new branches
+        new_branches = []
+        new_branches_honest = []
+        honest = challengers[num_adversary:]
+        adversary = challengers[:num_adversary]
+
+        for branch in honest_branch:
+            for challenger in honest:
+                if challenger.test(slot, branch[0]):
+                    new_branches_honest.append([slot, branch[1] + 1, 0, 0])
+
+        for branch in branches:
+            for challenger in adversary:
+                if challenger.test(slot, branch[0]):
+                    new_branches.append([slot, branch[1] + 1, branch[2] + 1, 0])
+
+        if len(new_branches_honest) > 0:
+            for branch in new_branches_honest:
+                honest_branch = np.vstack([honest_branch, branch])
+            honest_branch = honest_branch[honest_branch[:, 1].argsort()]
+            if len(honest_branch) > 1:
+                honest_branch = np.vsplit(branches, np.array([1, 2]))[1]
+            for branch in honest_branch:
+                l_honest = max(l_honest, branch[1])
+
+        if len(new_branches) > 0:
+            for branch in new_branches:
+                branches = np.vstack([branches, branch])
+            for branch in branches:
+                l_adversary = max(l_adversary, branch[1])
+
+        if len(new_branches) > 0 or len(new_branches_honest) > 0:
+            if forked:
+                fork_intervals.append(0)
+            else:
+                last_fork = l_honest
+                branches = honest_branch
+                forked = True
+
+
+        if slot % 1000 == 0:
+            print(slot, num_adversary, len(fork_intervals))
+
+        branches = branches[branches[:, 1].argsort()]
+        max_branches = 100
+        if len(branches) > max_branches:
+            branches = np.vsplit(branches, np.array([max_branches, 1]))[0]
+
+        slot = slot + 1
+    max_l = 0
+    for branch in branches:
+        max_l = max(branch[1], max_l)
+    for branch in honest_branch:
+        max_l = max(branch[1], max_l)
+    return max_l/slot, fork_intervals
+
+
 if __name__ == '__main__':
 
     avg_data = []
@@ -323,6 +397,11 @@ if __name__ == '__main__':
 
     for k in data_points:
         adv_axis.append(k/100)
+
+    pool = mp.Pool(mp.cpu_count())
+    output_3 = pool.map(grinding_sim_covert, [(100, k) for k in data_points])
+    pool.close()
+    quit()
 
     pool = mp.Pool(mp.cpu_count())
     output = pool.map(grinding_sim_static, [(100, k) for k in data_points])
